@@ -5,8 +5,7 @@ import { join } from 'node:path'
 import { after } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-/** The bundle that the plugin commands and the scheduler run. */
-export const BUNDLE = fileURLToPath(new URL('../../plugins/attic/dist/attic.mjs', import.meta.url))
+const BUNDLE = fileURLToPath(new URL('../../plugins/attic/dist/attic.mjs', import.meta.url))
 
 /** A temporary home folder with the agents' folders inside it. */
 export type Home = { root: string; claude: string; codex: string }
