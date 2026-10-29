@@ -7,29 +7,30 @@ import { restore } from './restore.ts'
 import type { Network } from './session.ts'
 import { setup } from './setup.ts'
 
-/** What one CLI run prints and its exit code. */
-export type Result = { code: number; stdout: string; stderr: string }
+/** How one CLI run ended. Its output went to `write` as it was printed, so a long upload shows where it is. */
+export type Result = { code: number; stderr: string }
 
 const USAGE =
   'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic restore <session id>\n'
 
-/** Runs the Attic CLI with `args`, the arguments after the script path. */
-export async function run(args: readonly string[]): Promise<Result> {
-  if (args.length === 1 && args[0] === '--version') return { code: 0, stdout: `${pkg.version}\n`, stderr: '' }
+/** Runs the Attic CLI with `args`, the arguments after the script path, writing its output to `write`. */
+export async function run(args: readonly string[], write: (text: string) => void): Promise<Result> {
+  if (args.length === 1 && args[0] === '--version') {
+    write(`${pkg.version}\n`)
+    return { code: 0, stderr: '' }
+  }
   const [name, ...rest] = args
-  if (name !== 'setup' && name !== 'backup' && name !== 'restore') return { code: 1, stdout: '', stderr: USAGE }
-  const lines: string[] = []
-  const stdout = () => lines.map((line) => `${line}\n`).join('')
-  const print = (line: string) => lines.push(line)
+  if (name !== 'setup' && name !== 'backup' && name !== 'restore') return { code: 1, stderr: USAGE }
+  const print = (line: string) => write(`${line}\n`)
   try {
     const options = envOptions(process.env)
     const code =
       name === 'setup'
         ? await setup({ ...options, ...grantOption(rest) }, print)
         : await (name === 'backup' ? backup : restore)(options, sessionId(rest), print)
-    return { code, stdout: stdout(), stderr: '' }
+    return { code, stderr: '' }
   } catch (error) {
-    return { code: 1, stdout: stdout(), stderr: `Error: ${errorMessage(error)}\n` }
+    return { code: 1, stderr: `Error: ${errorMessage(error)}\n` }
   }
 }
 

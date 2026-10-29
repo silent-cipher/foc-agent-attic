@@ -44,7 +44,10 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     return 0
   }
 
+  const started = Date.now()
+  const step = (line: string) => print(`[${Math.round((Date.now() - started) / 1000)}s] ${line}`)
   const { grant, sessionKey: privateKey } = await openLogin(options.network)
+  step(`Checking session key authorization on ${options.network}`)
   const chain = CHAINS[options.network]
   const sessionKey = fromSecp256k1({ privateKey, root: grant.owner, chain })
   await sessionKey.syncExpirations(PERMISSIONS)
@@ -54,6 +57,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   }
 
   const envelope = await encrypt(grant, piece.bytes)
+  step(`Encrypted ${session.files.length} files into ${envelope.length} bytes; choosing ${COPIES} storage providers`)
   const synapse = Synapse.create({
     account: grant.owner,
     chain,
@@ -68,6 +72,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     metadata: { 'foc/enc': '1', [KEYSPACE_ID_KEY]: grant.grant.keyspace, [COMMITMENT_KEY]: commitment(grant.key) },
   }
   const contexts = await synapse.storage.createContexts(target)
+  step(`Checking funds for providers ${contexts.map((context) => context.provider.id).join(' and ')}`)
   const [costs, account] = await Promise.all([
     synapse.storage.calculateMultiContextCosts(contexts, { pieceSizes: [BigInt(envelope.length)] }),
     getAccountSummary(synapse.client, { address: grant.owner }),
@@ -80,7 +85,24 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     return 2
   }
   // Not `{ contexts }`: explicit contexts turn off the SDK's retry on another provider when a copy fails.
-  const result = await synapse.storage.upload(envelope, target)
+  const pullStatus = new Map<bigint, string>()
+  const result = await synapse.storage.upload(envelope, {
+    ...target,
+    callbacks: {
+      onProviderSelected: (provider) => step(`Uploading to provider ${provider.id} (${provider.pdp.serviceURL})`),
+      onStored: (providerId, pieceCid) => step(`Stored on provider ${providerId} as piece ${pieceCid}`),
+      // Called on every poll; only a change of status is news.
+      onPullProgress: (providerId, _, status) => {
+        if (pullStatus.get(providerId) !== status) step(`Copy to provider ${providerId}: ${status}`)
+        pullStatus.set(providerId, status)
+      },
+      onCopyComplete: (providerId) => step(`Copied to provider ${providerId}`),
+      onCopyFailed: (providerId, _, error) => step(`Copy to provider ${providerId} failed: ${error.message}`),
+      onPiecesAdded: (hash, providerId) => step(`Committing on provider ${providerId}, transaction ${hash}`),
+      onPiecesConfirmed: (dataSetId, providerId) =>
+        step(`Committed on provider ${providerId} in data set ${dataSetId}`),
+    },
+  })
   if (!result.complete) {
     throw new Error(
       `Only ${result.copies.length} of ${COPIES} copies were committed, so the backup was not recorded. Run backup again.`
