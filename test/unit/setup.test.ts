@@ -7,13 +7,13 @@ const NOW = 1_800_000_000
 const DAY = 86_400
 
 const ready: Readiness = {
-  network: 'calibration',
   owner: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
   authorizedUntil: NOW + 30 * DAY,
   grantExpires: NOW + 10 * DAY,
   storageApproved: true,
   availableFunds: parseUnits('3.456', 18),
   approveUrl: 'https://pay.filecoin.cloud/console/setup?authorize=0xabc',
+  fundingUrl: 'https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration',
 }
 
 function report(changes: Partial<Readiness>): { code: number; text: string } {
@@ -44,11 +44,10 @@ test('an expired authorization counts as unauthorized', () => {
 })
 
 test('low funds or no storage approval print the pre-filled funding link', () => {
-  const funding = 'https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration'
   for (const changes of [{ availableFunds: parseUnits('0.99', 18) }, { storageApproved: false }]) {
     const { code, text } = report(changes)
     assert.equal(code, 2)
-    assert.ok(text.includes(funding), text)
+    assert.ok(text.includes(ready.fundingUrl), text)
   }
   assert.match(report({ availableFunds: 0n }).text, /✗ 0\.00 USDFC available \(keep at least 1\)/)
 })

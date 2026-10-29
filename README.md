@@ -19,6 +19,8 @@ The calibnet suite also runs from the manual **Calibnet** workflow, with the `AT
 
 Attic stores backups on mainnet only. Calibration guarantees no storage, so it is for testing: set `ATTIC_NETWORK=calibration` (for example `ATTIC_NETWORK=calibration claude --plugin-dir plugins/attic`). A session key is tied to the network it was made on; delete `~/.attic/session.env` to switch.
 
+To try console changes before they reach pay.filecoin.cloud, set `ATTIC_CONSOLE_URL` to a staging, preview or local console (for example `ATTIC_CONSOLE_URL=http://localhost:3000`). Setup's console links then point there.
+
 Try the plugin in Claude Code after `pnpm build`:
 
 ```sh

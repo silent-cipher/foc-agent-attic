@@ -80,6 +80,16 @@ test('setup refuses a bad Grant and saves nothing', async () => {
   }
 })
 
+test('ATTIC_CONSOLE_URL points the console links at another console, for testing', async () => {
+  const home = await tempHome()
+  const result = runAttic(home, ['setup'], { ATTIC_CONSOLE_URL: 'http://localhost:3000/' })
+  assert.equal(result.status, 2)
+  assert.match(result.stdout, /\nhttp:\/\/localhost:3000\/console\/setup\?authorize=0x/)
+  const bad = runAttic(home, ['setup'], { ATTIC_CONSOLE_URL: 'localhost:3000' })
+  assert.equal(bad.status, 1)
+  assert.match(bad.stderr, /ATTIC_CONSOLE_URL must be an http\(s\) URL/)
+})
+
 test('setup has no network option, and ATTIC_NETWORK takes only calibration', async () => {
   const home = await tempHome()
   const flag = runAttic(home, ['setup', '--network', 'calibration'])

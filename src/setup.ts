@@ -8,14 +8,13 @@ import { decrypt, encrypt } from './envelope.ts'
 import { type OpenedGrant, openGrant } from './grant.ts'
 import { type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
 
-const CONSOLE_URL = 'https://pay.filecoin.cloud'
 const CHAINS = { mainnet, calibration }
 const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 // The spike's exact deposit left 0 USDFC available, and the next upload then failed.
 const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
 
-export type SetupOptions = { network: Network; grant?: string }
+export type SetupOptions = { network: Network; consoleUrl: string; grant?: string }
 
 /**
  * Logs this machine in through the Filecoin Cloud console and reports whether backups can run.
@@ -40,7 +39,7 @@ export async function setup(options: SetupOptions, print: (line: string) => void
   print(`Session key ${sessionAddress} on ${session.network}`)
 
   const grant = await saveOrOpenGrant(session, options.grant, chain.id, path, print)
-  const approveUrl = await authorizeUrl(session, sessionAddress)
+  const approveUrl = await authorizeUrl(options.consoleUrl, session, sessionAddress)
   if (grant === undefined) {
     print('Approve this session key in the Filecoin Cloud console, then copy the Grant it shows:')
     print(approveUrl)
@@ -58,13 +57,13 @@ export async function setup(options: SetupOptions, print: (line: string) => void
   const authorizedUntil = Math.min(...PERMISSIONS.map((p) => Number(expirations[p] ?? 0n)))
   return reportReadiness(
     {
-      network: session.network,
       owner: grant.owner,
       authorizedUntil,
       grantExpires: grant.expires,
       storageApproved,
       availableFunds: account.availableFunds,
       approveUrl,
+      fundingUrl: `${options.consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${session.network}`,
     },
     print
   )
@@ -95,19 +94,18 @@ async function saveOrOpenGrant(
   }
 }
 
-async function authorizeUrl(session: Session, sessionAddress: Address): Promise<string> {
+async function authorizeUrl(consoleUrl: string, session: Session, sessionAddress: Address): Promise<string> {
   // With pubkey, the console also issues a Grant for the whole group key (node=keyspace), wrapped to it.
   const pubkey = publicKeyOf(session.sessionKey).toLowerCase()
   const pubkeysig = await privateKeyToAccount(session.sessionKey).signMessage({
     message: `Keysmith key agreement key: ${pubkey}`,
   })
   // Lowercase: the console's strict address check refuses a mixed-case address with a bad checksum.
-  return `${CONSOLE_URL}/console/setup?authorize=${sessionAddress.toLowerCase()}&scopes=createDataSet,addPieces&network=${session.network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
+  return `${consoleUrl}/console/setup?authorize=${sessionAddress.toLowerCase()}&scopes=createDataSet,addPieces&network=${session.network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
 }
 
 /** What the chain says about the owner's account and this session key. */
 export type Readiness = {
-  network: Network
   owner: Address
   /** Unix seconds; 0 when the owner never authorized the key. */
   authorizedUntil: number
@@ -117,6 +115,7 @@ export type Readiness = {
   /** USDFC base units (18 decimals). */
   availableFunds: bigint
   approveUrl: string
+  fundingUrl: string
 }
 
 /** Prints the readiness checklist and the console links that fix what is missing; returns the exit code. */
@@ -142,7 +141,7 @@ export function reportReadiness(
   }
   if (!r.storageApproved || !funded) {
     print('Deposit USDFC and approve the storage service in one step:')
-    print(`${CONSOLE_URL}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${r.network}`)
+    print(r.fundingUrl)
   }
   return authorized && r.storageApproved && funded ? 0 : 2
 }

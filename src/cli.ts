@@ -15,20 +15,34 @@ export async function run(args: readonly string[]): Promise<Result> {
   const lines: string[] = []
   const stdout = () => lines.map((line) => `${line}\n`).join('')
   try {
-    const code = await setup(setupOptions(args.slice(1), process.env.ATTIC_NETWORK), (line) => lines.push(line))
+    const code = await setup(setupOptions(args.slice(1), process.env), (line) => lines.push(line))
     return { code, stdout: stdout(), stderr: '' }
   } catch (error) {
     return { code: 1, stdout: stdout(), stderr: `Error: ${errorMessage(error)}\n` }
   }
 }
 
-// Calibration is a testnet that guarantees no storage, so it is only for tests and is never a user option.
-function setupOptions(args: string[], testNetwork: string | undefined): SetupOptions {
+// ATTIC_NETWORK and ATTIC_CONSOLE_URL are test switches, never user options: calibration guarantees no
+// storage, and a staging or local console is only for trying console changes before they ship.
+function setupOptions(args: string[], env: NodeJS.ProcessEnv): SetupOptions {
   const { grant } = parseArgs({ args, options: { grant: { type: 'string' } } }).values
-  if (testNetwork !== undefined && testNetwork !== 'calibration') {
-    throw new Error(`ATTIC_NETWORK can only be calibration, for testing, not ${testNetwork}`)
+  const { ATTIC_NETWORK: network, ATTIC_CONSOLE_URL: consoleUrl } = env
+  if (network !== undefined && network !== 'calibration') {
+    throw new Error(`ATTIC_NETWORK can only be calibration, for testing, not ${network}`)
   }
-  return { network: testNetwork ?? 'mainnet', ...(grant !== undefined && { grant }) }
+  return {
+    network: network ?? 'mainnet',
+    consoleUrl: consoleUrl === undefined ? 'https://pay.filecoin.cloud' : consoleOrigin(consoleUrl),
+    ...(grant !== undefined && { grant }),
+  }
+}
+
+function consoleOrigin(value: string): string {
+  const url = URL.parse(value)
+  if (url === null || (url.protocol !== 'https:' && url.protocol !== 'http:')) {
+    throw new Error(`ATTIC_CONSOLE_URL must be an http(s) URL, not ${value}`)
+  }
+  return url.origin
 }
 
 // viem's full message adds request arguments, a docs link and its version over several lines.
