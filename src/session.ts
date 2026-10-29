@@ -2,9 +2,13 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseEnv } from 'node:util'
+import { calibration, mainnet } from '@filoz/synapse-core/chains'
 import { type Hex, isHex, size } from 'viem'
+import { type OpenedGrant, openGrant } from './grant.ts'
 
-export type Network = 'mainnet' | 'calibration'
+export const CHAINS = { mainnet, calibration }
+
+export type Network = keyof typeof CHAINS
 
 /** What `~/.attic/session.env` holds. The Grant is absent until the owner pastes one. */
 export type Session = { sessionKey: Hex; network: Network; grant?: string }
@@ -46,4 +50,27 @@ export function writeSession(session: Session, path: string): void {
   rmSync(tmp, { force: true })
   writeFileSync(tmp, `${lines.join('\n')}\n`, { mode: 0o600, flag: 'wx' })
   renameSync(tmp, path)
+}
+
+/** A session the owner has logged in: its key and the Grant opened for it. */
+export type Login = { network: Network; sessionKey: Hex; grant: OpenedGrant }
+
+/**
+ * Opens the saved session's Grant for `network`.
+ *
+ * @throws Saying to run `/attic:setup` when there is no usable login.
+ */
+export async function openLogin(network: Network): Promise<Login> {
+  const path = sessionPath()
+  const session = readSession(path)
+  if (session?.grant === undefined) throw new Error('Attic is not logged in. Run /attic:setup first.')
+  if (session.network !== network) {
+    throw new Error(`The saved session key is for ${session.network}, not ${network}. Delete ${path} to start over.`)
+  }
+  try {
+    const grant = await openGrant(session.grant, session.sessionKey, CHAINS[network].id)
+    return { network, sessionKey: session.sessionKey, grant }
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)} Run /attic:setup to log in again.`)
+  }
 }

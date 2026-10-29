@@ -1,15 +1,14 @@
 import { publicKeyOf } from '@filoz/keysmith'
-import { calibration, mainnet } from '@filoz/synapse-core/chains'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
 import { AddPiecesPermission, CreateDataSetPermission, getExpirations } from '@filoz/synapse-core/session-key'
 import { type Address, createPublicClient, formatUnits, http, parseUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { decrypt, encrypt } from './envelope.ts'
 import { type OpenedGrant, openGrant } from './grant.ts'
-import { type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
+import { CHAINS, type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
 
-const CHAINS = { mainnet, calibration }
-const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+/** What every Attic session key is authorized for. */
+export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 // The spike's exact deposit left 0 USDFC available, and the next upload then failed.
 const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
@@ -63,10 +62,20 @@ export async function setup(options: SetupOptions, print: (line: string) => void
       storageApproved,
       availableFunds: account.availableFunds,
       approveUrl,
-      fundingUrl: `${options.consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${session.network}`,
+      fundingUrl: fundingUrl(options.consoleUrl, session.network),
     },
     print
   )
+}
+
+/** The console page that deposits USDFC and approves the storage service in one step. */
+export function fundingUrl(consoleUrl: string, network: Network): string {
+  return `${consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${network}`
+}
+
+/** Whether `availableFunds` (USDFC base units) leave enough headroom for the next upload. */
+export function hasMinimumFunds(availableFunds: bigint): boolean {
+  return availableFunds >= parseUnits(String(MIN_AVAILABLE_USDFC), 18)
 }
 
 async function saveOrOpenGrant(
@@ -125,7 +134,7 @@ export function reportReadiness(
   now = Math.floor(Date.now() / 1000)
 ): number {
   const authorized = r.authorizedUntil > now
-  const funded = r.availableFunds >= parseUnits(String(MIN_AVAILABLE_USDFC), 18)
+  const funded = hasMinimumFunds(r.availableFunds)
   const usdfc = Number(formatUnits(r.availableFunds, 18)).toFixed(2)
   print(authorized ? '✓ Session key authorized' : `✗ Session key not authorized by ${r.owner}`)
   print(r.storageApproved ? '✓ Storage service approved' : '✗ Storage service not approved')

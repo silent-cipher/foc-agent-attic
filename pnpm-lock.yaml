@@ -172,6 +172,9 @@ importers:
       '@filoz/synapse-core':
         specifier: 0.10.2
         version: 0.10.2(typescript@7.0.2)(viem@2.57.13(typescript@7.0.2)(zod@4.4.3))
+      '@filoz/synapse-sdk':
+        specifier: 2.0.2
+        version: 2.0.2(typescript@7.0.2)(viem@2.57.13(typescript@7.0.2)(zod@4.4.3))
       filecoin-encryption-envelope:
         specifier: 0.1.0
         version: 0.1.0
@@ -432,6 +435,11 @@ packages:
 
   '@filoz/synapse-core@0.10.2':
     resolution: {integrity: sha512-NnQBsZrahxxIuQ2m0pFpD6gCFHRm3VPPveQ0r66cmN6uiTaFyZR1AneIZJf+tAgK9Jq7kYGIryhW/8nGAGlD7w==}
+    peerDependencies:
+      viem: 2.x
+
+  '@filoz/synapse-sdk@2.0.2':
+    resolution: {integrity: sha512-PiYybc4FHq/YWHouZKiS9otp3e32agE2u0C26L04uPklfYMdVeagJV38LlppxDkSTmymHrxJ292i6kGZe9hG4A==}
     peerDependencies:
       viem: 2.x
 
@@ -1101,6 +1109,14 @@ snapshots:
       sync-multihash-sha2: 1.0.0
       viem: 2.57.13(typescript@7.0.2)(zod@4.4.3)
       zod: 4.4.3
+    transitivePeerDependencies:
+      - typescript
+
+  '@filoz/synapse-sdk@2.0.2(typescript@7.0.2)(viem@2.57.13(typescript@7.0.2)(zod@4.4.3))':
+    dependencies:
+      '@filoz/synapse-core': 0.10.2(typescript@7.0.2)(viem@2.57.13(typescript@7.0.2)(zod@4.4.3))
+      multiformats: 14.0.5
+      viem: 2.57.13(typescript@7.0.2)(zod@4.4.3)
     transitivePeerDependencies:
       - typescript
 

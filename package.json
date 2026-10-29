@@ -33,6 +33,7 @@
   "dependencies": {
     "@filoz/keysmith": "0.1.0",
     "@filoz/synapse-core": "0.10.2",
+    "@filoz/synapse-sdk": "2.0.2",
     "filecoin-encryption-envelope": "0.1.0",
     "viem": "2.57.13"
   }
