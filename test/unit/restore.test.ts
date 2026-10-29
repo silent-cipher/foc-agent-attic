@@ -43,3 +43,15 @@ test('a path outside the home folder writes nothing', () => {
     assert.equal(existsSync(join(root, TRANSCRIPT.path)), false)
   }
 })
+
+test('a local transcript that grew since the backup is newer: nothing is written and it says to back it up', () => {
+  const root = home()
+  mkdirSync(join(root, 'projects/-tmp-app'), { recursive: true })
+  writeFileSync(join(root, TRANSCRIPT.path), 'transcript and more messages')
+  assert.throws(
+    () => writeSessionFiles(root, [TRANSCRIPT, SUBAGENT]),
+    /s1\.jsonl is newer than the backup.*\/attic:backup/
+  )
+  assert.equal(existsSync(join(root, SUBAGENT.path)), false)
+  assert.equal(readFileSync(join(root, TRANSCRIPT.path), 'utf8'), 'transcript and more messages')
+})

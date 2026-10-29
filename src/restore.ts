@@ -4,7 +4,7 @@ import { Synapse } from '@filoz/synapse-sdk'
 import { SOURCE } from './backup.ts'
 import { decrypt } from './envelope.ts'
 import { indexPath, readIndex } from './local-index.ts'
-import { type SessionFile, sha256, unpack } from './piece.ts'
+import { type SessionFile, unpack } from './piece.ts'
 import { CHAINS, type Network, openLogin } from './session.ts'
 
 export type RestoreOptions = { network: Network; claudeHome: string }
@@ -57,12 +57,18 @@ export function writeSessionFiles(home: string, files: readonly SessionFile[]): 
       throw new Error(`The backup holds ${path}, which is outside ${home}. Nothing was written.`)
     }
     if (!existsSync(target)) return [{ target, bytes }]
-    if (sha256(readFileSync(target)) !== sha256(bytes)) {
+    const local = readFileSync(target)
+    if (local.equals(bytes)) return []
+    // Transcripts only grow, so a local file that starts with the backup's bytes was used after the backup.
+    if (local.length > bytes.length && local.subarray(0, bytes.length).equals(bytes)) {
       throw new Error(
-        `${target} already exists and differs from the backup. Move it away to restore. Nothing was written.`
+        `${target} is newer than the backup: the session was used after it was backed up. ` +
+          'Nothing was written. Resume it as it is, or run /attic:backup with its ID to back up the newer version.'
       )
     }
-    return []
+    throw new Error(
+      `${target} already exists and differs from the backup. Move it away to restore. Nothing was written.`
+    )
   })
   for (const { target, bytes } of missing) {
     mkdirSync(dirname(target), { recursive: true })
