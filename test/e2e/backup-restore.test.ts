@@ -7,7 +7,7 @@ import { type Home, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
 
-function writeIndexEntry(home: Home, paths: string[]): void {
+function writeIndexEntry(home: Home, paths: string[], network = 'mainnet'): void {
   const files = paths.map((path) => {
     const bytes = readFileSync(join(home.claude, path))
     return { path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
@@ -20,6 +20,7 @@ function writeIndexEntry(home: Home, paths: string[]): void {
     machine: 'e2e',
     lastWriteAt: '2026-10-28T09:12:00.000Z',
     files,
+    network,
     pieceCid: 'bafkzcibcaapeh2qvtlm6tdodcaa6s3jfohqc6rqmfhwdgbm2nj4bsgzddlqbu3a',
     size: 1234,
     copies: [],
@@ -64,6 +65,17 @@ test('backup of a session that changed since its index entry goes on to upload i
   const result = runAttic(home, ['backup', ID])
   assert.equal(result.status, 1)
   assert.match(result.stderr, /Attic is not logged in/)
+})
+
+test('a backup on calibration does not count as one on mainnet', async () => {
+  const home = await tempHome()
+  writeIndexEntry(home, writeClaudeSession(home, ID), 'calibration')
+  const backedUp = runAttic(home, ['backup', ID])
+  assert.equal(backedUp.status, 1)
+  assert.match(backedUp.stderr, /Attic is not logged in/)
+  const restored = runAttic(home, ['restore', ID])
+  assert.equal(restored.status, 1)
+  assert.match(restored.stderr, new RegExp(`Session ${ID} is backed up on calibration, not mainnet`))
 })
 
 test('restore of a session with no backup writes nothing', async () => {

@@ -2,9 +2,12 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Header } from './piece.ts'
+import type { Network } from './session.ts'
 
 /** One backed-up session: its piece header and where the piece is stored. */
 export type IndexEntry = Header & {
+  /** Where the piece is: a calibration test backup is no backup on mainnet. */
+  network: Network
   pieceCid: string
   /** Bytes of the encrypted piece. */
   size: number

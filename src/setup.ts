@@ -10,7 +10,7 @@ import { CHAINS, type Network, readSession, type Session, sessionPath, writeSess
 /** What every Attic session key is authorized for. */
 export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 // The spike's exact deposit left 0 USDFC available, and the next upload then failed.
-const MIN_AVAILABLE_USDFC = 1
+export const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
 
 export type SetupOptions = { network: Network; consoleUrl: string; grant?: string }

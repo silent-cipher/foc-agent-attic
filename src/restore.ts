@@ -16,6 +16,9 @@ export type RestoreOptions = { network: Network; claudeHome: string }
 export async function restore(options: RestoreOptions, id: string, print: (line: string) => void): Promise<number> {
   const entry = readIndex(indexPath()).sessions[id]
   if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
+  if (entry.network !== options.network) {
+    throw new Error(`Session ${id} is backed up on ${entry.network}, not ${options.network}. Nothing was written.`)
+  }
   const { grant } = await openLogin(options.network)
   const synapse = Synapse.create({ account: grant.owner, chain: CHAINS[options.network], source: SOURCE })
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)

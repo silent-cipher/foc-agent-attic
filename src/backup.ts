@@ -3,12 +3,13 @@ import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { getAccountSummary } from '@filoz/synapse-core/pay'
 import { fromSecp256k1 } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
+import { formatUnits } from 'viem'
 import { readClaudeSession } from './claude-code.ts'
 import { encrypt } from './envelope.ts'
 import { indexPath, readIndex, writeIndex } from './local-index.ts'
 import { pack } from './piece.ts'
 import { CHAINS, type Network, openLogin } from './session.ts'
-import { fundingUrl, hasMinimumFunds, PERMISSIONS } from './setup.ts'
+import { fundingUrl, hasMinimumFunds, MIN_AVAILABLE_USDFC, PERMISSIONS } from './setup.ts'
 
 /** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
 export const SOURCE = 'attic'
@@ -38,7 +39,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     session.files
   )
   const previous = index.sessions[id]
-  if (previous !== undefined && JSON.stringify(previous.files) === JSON.stringify(piece.header.files)) {
+  if (previous?.network === options.network && JSON.stringify(previous.files) === JSON.stringify(piece.header.files)) {
     print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
     return 0
   }
@@ -76,10 +77,10 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     synapse.storage.calculateMultiContextCosts(contexts, { pieceSizes: [BigInt(envelope.length)] }),
     getAccountSummary(synapse.client, { address: grant.owner }),
   ])
-  // Funding the exact cost left nothing for the next upload in the spike, so setup's headroom applies too.
-  if (!costs.ready || !hasMinimumFunds(account.availableFunds)) {
-    print('✗ Not enough USDFC available, or the storage service is not approved. Nothing was uploaded.')
-    print('Deposit USDFC and approve the storage service in one step:')
+  const problems = fundingProblems(costs, account.availableFunds)
+  if (problems.length > 0) {
+    for (const problem of problems) print(problem)
+    print('Nothing was uploaded. Deposit USDFC and approve the storage service in one step:')
     print(fundingUrl(options.consoleUrl, options.network))
     return 2
   }
@@ -97,9 +98,31 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     dataSetId: String(copy.dataSetId),
     pieceId: String(copy.pieceId),
   }))
-  index.sessions[id] = { ...piece.header, pieceCid: result.pieceCid.toString(), size: envelope.length, copies }
+  index.sessions[id] = {
+    ...piece.header,
+    network: options.network,
+    pieceCid: result.pieceCid.toString(),
+    size: envelope.length,
+    copies,
+  }
   writeIndex(index, path)
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
   print(`  Piece ${result.pieceCid} in data set ${copies.map((copy) => copy.dataSetId).join(', ')}`)
   return 0
+}
+
+/** What in the owner's account stops this upload, one line each; empty when it can go ahead. */
+export function fundingProblems(
+  costs: { needsFwssMaxApproval: boolean; depositNeeded: bigint },
+  availableFunds: bigint
+): string[] {
+  const usdfc = (amount: bigint) => Number(formatUnits(amount, 18)).toFixed(2)
+  const problems = costs.needsFwssMaxApproval ? ['✗ Storage service not approved'] : []
+  if (costs.depositNeeded > 0n) {
+    problems.push(`✗ ${usdfc(availableFunds)} USDFC available, ${usdfc(costs.depositNeeded)} short of this upload`)
+  } else if (!hasMinimumFunds(availableFunds)) {
+    // Funding the exact cost left nothing for the next upload in the spike, so setup's headroom applies too.
+    problems.push(`✗ ${usdfc(availableFunds)} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`)
+  }
+  return problems
 }
