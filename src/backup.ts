@@ -13,6 +13,8 @@ import { fundingUrl, hasMinimumFunds, PERMISSIONS } from './setup.ts'
 /** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
 export const SOURCE = 'attic'
 const COPIES = 2
+// The SDK waits up to 2 hours for a copy that a provider never starts (synapse-sdk#1058).
+const COPY_TIMEOUT_MS = 5 * 60_000
 
 export type BackupOptions = { network: Network; consoleUrl: string; claudeHome: string }
 
@@ -86,26 +88,38 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   }
   // Not `{ contexts }`: explicit contexts turn off the SDK's retry on another provider when a copy fails.
   const pullStatus = new Map<bigint, string>()
+  // Aborting reaches only the copy: the SDK's commits take no signal, so the first copy still lands.
+  const stopCopy = new AbortController()
+  let copyTimer: NodeJS.Timeout | undefined
   const result = await synapse.storage.upload(envelope, {
     ...target,
+    signal: stopCopy.signal,
     callbacks: {
-      onProviderSelected: (provider) => step(`Uploading to provider ${provider.id} (${provider.pdp.serviceURL})`),
+      onProviderSelected: (provider) => step(`Selected provider ${provider.id} (${provider.pdp.serviceURL})`),
       onStored: (providerId, pieceCid) => step(`Stored on provider ${providerId} as piece ${pieceCid}`),
       // Called on every poll; only a change of status is news.
       onPullProgress: (providerId, _, status) => {
         if (pullStatus.get(providerId) !== status) step(`Copy to provider ${providerId}: ${status}`)
         pullStatus.set(providerId, status)
+        copyTimer ??= setTimeout(() => stopCopy.abort(), COPY_TIMEOUT_MS).unref()
       },
-      onCopyComplete: (providerId) => step(`Copied to provider ${providerId}`),
+      onCopyComplete: (providerId) => {
+        clearTimeout(copyTimer)
+        step(`Copied to provider ${providerId}`)
+      },
       onCopyFailed: (providerId, _, error) => step(`Copy to provider ${providerId} failed: ${error.message}`),
       onPiecesAdded: (hash, providerId) => step(`Committing on provider ${providerId}, transaction ${hash}`),
       onPiecesConfirmed: (dataSetId, providerId) =>
         step(`Committed on provider ${providerId} in data set ${dataSetId}`),
     },
   })
+  clearTimeout(copyTimer)
   if (!result.complete) {
+    const reason = stopCopy.signal.aborted
+      ? ` The second provider did not finish its copy within ${COPY_TIMEOUT_MS / 60_000} minutes.`
+      : ''
     throw new Error(
-      `Only ${result.copies.length} of ${COPIES} copies were committed, so the backup was not recorded. Run backup again.`
+      `Only ${result.copies.length} of ${COPIES} copies were committed, so the backup was not recorded.${reason} Run backup again later.`
     )
   }
   const copies = result.copies.map((copy) => ({
