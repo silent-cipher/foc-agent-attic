@@ -21,12 +21,7 @@ export type OpenedGrant = {
  *
  * @throws With the reason the Grant is refused, safe to print.
  */
-export async function openGrant(
-  text: string,
-  sessionKey: Hex,
-  chainId: number,
-  now = Math.floor(Date.now() / 1000)
-): Promise<OpenedGrant> {
+export async function openGrant(text: string, sessionKey: Hex, chainId: number): Promise<OpenedGrant> {
   // Consoles and terminals wrap long lines.
   const compact = text.replace(/\s+/g, '')
   if (!/^fgr1_[A-Za-z0-9_-]+$/.test(compact)) {
@@ -34,7 +29,7 @@ export async function openGrant(
   }
   let opened: Awaited<ReturnType<typeof openDelivery>>
   try {
-    opened = await openDelivery(sessionKey, Buffer.from(compact.slice('fgr1_'.length), 'base64url'), { now })
+    opened = await openDelivery(sessionKey, Buffer.from(compact.slice('fgr1_'.length), 'base64url'))
   } catch (error) {
     throw new Error(`The Grant does not open: ${error instanceof Error ? error.message : String(error)}.`)
   }

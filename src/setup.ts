@@ -23,11 +23,8 @@ export type SetupOptions = { network?: Network; grant?: string }
  *
  * @returns 0 when ready, 2 when the owner still has something to do.
  */
-export async function setup(
-  options: SetupOptions,
-  print: (line: string) => void,
-  path = sessionPath()
-): Promise<number> {
+export async function setup(options: SetupOptions, print: (line: string) => void): Promise<number> {
+  const path = sessionPath()
   let session = readSession(path)
   if (session === undefined) {
     session = { sessionKey: generatePrivateKey(), network: options.network ?? 'mainnet' }

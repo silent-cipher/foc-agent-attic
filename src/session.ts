@@ -18,7 +18,7 @@ export function sessionPath(): string {
  *
  * @throws When the file exists but is not a session, so a stray edit never replaces an authorized key.
  */
-export function readSession(path = sessionPath()): Session | undefined {
+export function readSession(path: string): Session | undefined {
   if (!existsSync(path)) return undefined
   const { SESSION_KEY: sessionKey, NETWORK: network, GRANT: grant } = parseEnv(readFileSync(path, 'utf8'))
   if (
@@ -33,7 +33,7 @@ export function readSession(path = sessionPath()): Session | undefined {
 }
 
 /** Replaces the saved session in one rename, owner-readable only. */
-export function writeSession(session: Session, path = sessionPath()): void {
+export function writeSession(session: Session, path: string): void {
   const lines = [
     '# Attic session key. Delete this file to start over with a new key.',
     `SESSION_KEY=${session.sessionKey}`,
