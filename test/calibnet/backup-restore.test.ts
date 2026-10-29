@@ -9,7 +9,7 @@ import { calibration } from '@filoz/synapse-core/chains'
 import { AddPiecesPermission, CreateDataSetPermission, loginSync } from '@filoz/synapse-core/session-key'
 import { createWalletClient, http, isHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { type Home, runAttic, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
+import { type Home, runAttic, runAtticLive, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
 import { makeGrant } from '../make-grant.ts'
 
 const ownerKey = process.env.ATTIC_CALIBNET_PRIVATE_KEY
@@ -29,7 +29,7 @@ function claudeResume(home: Home, id: string): string {
 
 test('a backed-up session, deleted locally, restores and Claude Code resumes it', {
   skip: ownerKey === undefined && 'set ATTIC_CALIBNET_PRIVATE_KEY to a funded calibnet wallet key',
-  timeout: 900_000,
+  timeout: 1_200_000,
 }, async () => {
   assert.ok(ownerKey !== undefined && isHex(ownerKey))
   const home = await tempHome()
@@ -57,14 +57,14 @@ test('a backed-up session, deleted locally, restores and Claude Code resumes it'
 
   const paths = writeClaudeSession(home, id)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
-  const backedUp = runAttic(home, ['backup', id], ENV)
+  const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
   assert.equal(backedUp.status, 0, backedUp.stdout + backedUp.stderr)
   assert.match(backedUp.stdout, new RegExp(`✓ Backed up session ${id}: 2 files`))
 
   rmSync(join(home.claude, 'projects'), { recursive: true })
   assert.match(claudeResume(home, id), /No conversation found/)
 
-  const restored = runAttic(home, ['restore', id], ENV)
+  const restored = await runAtticLive(home, ['restore', id], ENV, 300_000)
   assert.equal(restored.status, 0, restored.stdout + restored.stderr)
   assert.ok(restored.stdout.split('\n').includes(`claude --resume ${id}`), restored.stdout)
   assert.deepEqual(

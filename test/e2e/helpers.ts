@@ -1,4 +1,5 @@
-import { type SpawnSyncReturns, spawnSync } from 'node:child_process'
+import { type SpawnSyncReturns, spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -18,16 +19,44 @@ export async function tempHome(): Promise<Home> {
   return { root, claude: join(root, '.claude'), codex: join(root, '.codex') }
 }
 
-/** Runs the bundle in `home` with a bare environment, as launchd and systemd do, plus `env`. */
+// A bare environment, as launchd and systemd give the daily job.
+const bareEnv = (home: Home, env: Record<string, string>) => ({
+  PATH: '/usr/bin:/bin',
+  HOME: home.root,
+  CLAUDE_CONFIG_DIR: home.claude,
+  CODEX_HOME: home.codex,
+  ...env,
+})
+
+/** Runs the bundle in `home` with a bare environment, plus `env`. */
 export function runAttic(
   home: Home,
   args: readonly string[],
   env: Record<string, string> = {}
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [BUNDLE, ...args], {
-    encoding: 'utf8',
-    env: { PATH: '/usr/bin:/bin', HOME: home.root, CLAUDE_CONFIG_DIR: home.claude, CODEX_HOME: home.codex, ...env },
-  })
+  return spawnSync(process.execPath, [BUNDLE, ...args], { encoding: 'utf8', env: bareEnv(home, env) })
+}
+
+/**
+ * Runs the bundle like `runAttic`, copying its output to the test log as it prints, so a slow upload shows
+ * where it is. Killed after `timeout` ms, keeping what it printed.
+ */
+export async function runAtticLive(
+  home: Home,
+  args: readonly string[],
+  env: Record<string, string>,
+  timeout: number
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  const child = spawn(process.execPath, [BUNDLE, ...args], { env: bareEnv(home, env), timeout })
+  const output = { stdout: '', stderr: '' }
+  for (const name of ['stdout', 'stderr'] as const) {
+    child[name].setEncoding('utf8').on('data', (text: string) => {
+      output[name] += text
+      process.stderr.write(text.replace(/^(?=.)/gm, `attic ${args[0]}> `))
+    })
+  }
+  const [status] = await once(child, 'close')
+  return { status: typeof status === 'number' ? status : null, ...output }
 }
 
 /** Writes a Claude Code session, one message and one subagent, and returns its paths under `home.claude`. */
