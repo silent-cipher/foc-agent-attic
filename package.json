@@ -1,0 +1,32 @@
+{
+  "name": "foc-agent-attic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Back up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cloud",
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.13.0",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --log-level=warning --outfile=plugins/attic/dist/attic.mjs",
+    "typecheck": "tsc",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "node --test 'test/unit/**/*.test.ts'",
+    "test:e2e": "pnpm build && node --test 'test/e2e/**/*.test.ts'"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@types/node": "26.5.1",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

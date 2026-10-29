@@ -1,0 +1,16 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "attic",
+  "description": "Agent Attic: back up agent sessions to Filecoin Onchain Cloud.",
+  "owner": {
+    "name": "Puspendra Mahariya",
+    "url": "https://github.com/silent-cipher"
+  },
+  "plugins": [
+    {
+      "name": "attic",
+      "source": "./plugins/attic",
+      "description": "Back up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cloud."
+    }
+  ]
+}
