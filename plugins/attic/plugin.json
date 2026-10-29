@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "attic",
+  "version": "0.1.0",
+  "description": "Back up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cloud.",
+  "author": {
+    "name": "Puspendra Mahariya",
+    "url": "https://github.com/silent-cipher"
+  },
+  "repository": "https://github.com/silent-cipher/foc-agent-attic",
+  "keywords": ["filecoin", "backup", "sessions", "encryption"]
+}
