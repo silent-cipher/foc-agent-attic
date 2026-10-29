@@ -21,9 +21,12 @@ jobs:
         with:
           require-lockfile: true
 
-      # The backup test checks Claude Code itself can resume a restored session.
+      # The backup test checks Claude Code itself can resume a restored session. Its postinstall
+      # script puts the `claude` binary in place, and npm skips install scripts unless allowed.
       - name: Install Claude Code
-        run: npm install --global @anthropic-ai/claude-code@2.1.312
+        run: |
+          npm install --global --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@2.1.312
+          claude --version
 
       - name: Build and calibnet tests
         run: pnpm test:calibnet
