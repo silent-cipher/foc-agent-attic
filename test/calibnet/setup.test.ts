@@ -19,14 +19,15 @@ test('setup sees a session key the owner authorized on calibnet', {
 }, async () => {
   assert.ok(ownerKey !== undefined && isHex(ownerKey))
   const home = await tempHome()
-  assert.equal(runAttic(home, ['setup', '--network', 'calibration']).status, 2)
+  const env = { ATTIC_NETWORK: 'calibration' }
+  assert.equal(runAttic(home, ['setup'], env).status, 2)
   const { SESSION_KEY: sessionKey } = parseEnv(readFileSync(join(home.root, '.attic', 'session.env'), 'utf8'))
   assert.ok(sessionKey !== undefined && isHex(sessionKey))
 
   // The console's two steps, done with the owner key: a Grant, then the on-chain authorization.
   const expires = Math.floor(Date.now() / 1000) + 3600
   const grant = await makeGrant({ ownerKey, sessionKey, chainId: calibration.id, expires })
-  const before = runAttic(home, ['setup', '--grant', grant])
+  const before = runAttic(home, ['setup', '--grant', grant], env)
   assert.equal(before.status, 2, before.stdout + before.stderr)
   assert.match(before.stdout, /✓ Grant saved/)
   assert.match(before.stdout, /✗ Session key not authorized/)
@@ -40,10 +41,10 @@ test('setup sees a session key the owner authorized on calibnet', {
   })
 
   // The next read can hit an RPC node that has not reached the login block yet.
-  let after = runAttic(home, ['setup'])
+  let after = runAttic(home, ['setup'], env)
   for (let attempt = 1; attempt < 6 && !after.stdout.includes('✓ Session key authorized'); attempt++) {
     await setTimeout(10_000)
-    after = runAttic(home, ['setup'])
+    after = runAttic(home, ['setup'], env)
   }
   assert.match(after.stdout, /✓ Session key authorized/, after.stdout + after.stderr)
   assert.match(after.stdout, /Session key expires \d{4}-\d{2}-\d{2} \(in 0 days\)/)

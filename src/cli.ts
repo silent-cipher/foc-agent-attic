@@ -6,7 +6,7 @@ import { type SetupOptions, setup } from './setup.ts'
 /** What one CLI run prints and its exit code. */
 export type Result = { code: number; stdout: string; stderr: string }
 
-const USAGE = 'Usage: attic --version | attic setup [--network mainnet|calibration] [--grant <fgr1_…>]\n'
+const USAGE = 'Usage: attic --version | attic setup [--grant <fgr1_…>]\n'
 
 /** Runs the Attic CLI with `args`, the arguments after the script path. */
 export async function run(args: readonly string[]): Promise<Result> {
@@ -15,20 +15,20 @@ export async function run(args: readonly string[]): Promise<Result> {
   const lines: string[] = []
   const stdout = () => lines.map((line) => `${line}\n`).join('')
   try {
-    const code = await setup(setupOptions(args.slice(1)), (line) => lines.push(line))
+    const code = await setup(setupOptions(args.slice(1), process.env.ATTIC_NETWORK), (line) => lines.push(line))
     return { code, stdout: stdout(), stderr: '' }
   } catch (error) {
     return { code: 1, stdout: stdout(), stderr: `Error: ${errorMessage(error)}\n` }
   }
 }
 
-function setupOptions(args: string[]): SetupOptions {
-  const { values } = parseArgs({ args, options: { network: { type: 'string' }, grant: { type: 'string' } } })
-  const { network, grant } = values
-  if (network !== undefined && network !== 'mainnet' && network !== 'calibration') {
-    throw new Error(`--network must be mainnet or calibration, not ${network}`)
+// Calibration is a testnet that guarantees no storage, so it is only for tests and is never a user option.
+function setupOptions(args: string[], testNetwork: string | undefined): SetupOptions {
+  const { grant } = parseArgs({ args, options: { grant: { type: 'string' } } }).values
+  if (testNetwork !== undefined && testNetwork !== 'calibration') {
+    throw new Error(`ATTIC_NETWORK can only be calibration, for testing, not ${testNetwork}`)
   }
-  return { ...(network !== undefined && { network }), ...(grant !== undefined && { grant }) }
+  return { network: testNetwork ?? 'mainnet', ...(grant !== undefined && { grant }) }
 }
 
 // viem's full message adds request arguments, a docs link and its version over several lines.

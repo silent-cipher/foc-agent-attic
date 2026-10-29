@@ -15,7 +15,7 @@ const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
 
-export type SetupOptions = { network?: Network; grant?: string }
+export type SetupOptions = { network: Network; grant?: string }
 
 /**
  * Logs this machine in through the Filecoin Cloud console and reports whether backups can run.
@@ -27,12 +27,12 @@ export async function setup(options: SetupOptions, print: (line: string) => void
   const path = sessionPath()
   let session = readSession(path)
   if (session === undefined) {
-    session = { sessionKey: generatePrivateKey(), network: options.network ?? 'mainnet' }
+    session = { sessionKey: generatePrivateKey(), network: options.network }
     writeSession(session, path)
     print(`✓ New session key saved to ${path} (owner-readable only)`)
-  } else if (options.network !== undefined && options.network !== session.network) {
+  } else if (options.network !== session.network) {
     throw new Error(
-      `The saved session key is for ${session.network}. Delete ${path} to start over on ${options.network}.`
+      `The saved session key is for ${session.network}, not ${options.network}. Delete ${path} to start over.`
     )
   }
   const chain = CHAINS[session.network]

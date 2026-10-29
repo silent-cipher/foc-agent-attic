@@ -1,12 +1,12 @@
 ---
 description: Log in to Filecoin Onchain Cloud through the console and check Attic can back up
-argument-hint: "[--network calibration] [fgr1_… Grant]"
+argument-hint: "[fgr1_… Grant]"
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" setup:*)
 ---
 
 Arguments: $ARGUMENTS
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" setup`, adding `--network <name>` if the arguments name a network, and `--grant <Grant>` if they hold a Grant (text starting `fgr1_`; remove any whitespace or line breaks inside it).
+Run `node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" setup`, adding `--grant <Grant>` if the arguments hold a Grant (text starting `fgr1_`; remove any whitespace or line breaks inside it).
 
 Then, by exit code:
 

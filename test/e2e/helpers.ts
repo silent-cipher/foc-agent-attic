@@ -17,10 +17,14 @@ export async function tempHome(): Promise<Home> {
   return { root, claude: join(root, '.claude'), codex: join(root, '.codex') }
 }
 
-/** Runs the bundle in `home` with a bare environment, as launchd and systemd do. */
-export function runAttic(home: Home, args: readonly string[]): SpawnSyncReturns<string> {
+/** Runs the bundle in `home` with a bare environment, as launchd and systemd do, plus `env`. */
+export function runAttic(
+  home: Home,
+  args: readonly string[],
+  env: Record<string, string> = {}
+): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, [BUNDLE, ...args], {
     encoding: 'utf8',
-    env: { PATH: '/usr/bin:/bin', HOME: home.root, CLAUDE_CONFIG_DIR: home.claude, CODEX_HOME: home.codex },
+    env: { PATH: '/usr/bin:/bin', HOME: home.root, CLAUDE_CONFIG_DIR: home.claude, CODEX_HOME: home.codex, ...env },
   })
 }
