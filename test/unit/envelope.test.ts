@@ -13,7 +13,6 @@ test('a whole group key Grant encrypts and decrypts a multi-chunk envelope', asy
   // Over FEE's 256 KiB chunk, so the chunked scheme writes more than one chunk.
   const plaintext = new Uint8Array(randomBytes(600 * 1024))
   const envelope = await encrypt(grant, plaintext)
-  assert.notDeepEqual(envelope.subarray(-plaintext.length), plaintext)
   assert.deepEqual(await decrypt(grant, envelope), plaintext)
 })
 

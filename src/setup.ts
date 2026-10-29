@@ -42,7 +42,7 @@ export async function setup(
   const sessionAddress = privateKeyToAccount(session.sessionKey).address
   print(`Session key ${sessionAddress} on ${session.network}`)
 
-  const grant = await loadGrant(session, options.grant, chain.id, path, print)
+  const grant = await saveOrOpenGrant(session, options.grant, chain.id, path, print)
   const approveUrl = await authorizeUrl(session, sessionAddress)
   if (grant === undefined) {
     print('Approve this session key in the Filecoin Cloud console, then copy the Grant it shows:')
@@ -73,8 +73,7 @@ export async function setup(
   )
 }
 
-/** The Grant passed in, checked and saved; else the saved one, if it still opens. */
-async function loadGrant(
+async function saveOrOpenGrant(
   session: Session,
   text: string | undefined,
   chainId: number,
@@ -99,11 +98,8 @@ async function loadGrant(
   }
 }
 
-/**
- * The console link that authorizes the session key and issues a Grant for the owner's whole
- * group key, wrapped to the key-agreement key the session key signs here.
- */
 async function authorizeUrl(session: Session, sessionAddress: Address): Promise<string> {
+  // With pubkey, the console also issues a Grant for the whole group key (node=keyspace), wrapped to it.
   const pubkey = publicKeyOf(session.sessionKey).toLowerCase()
   const pubkeysig = await privateKeyToAccount(session.sessionKey).signMessage({
     message: `Keysmith key agreement key: ${pubkey}`,

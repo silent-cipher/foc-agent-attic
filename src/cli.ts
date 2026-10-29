@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util'
+import { BaseError } from 'viem'
 import pkg from '../package.json' with { type: 'json' }
 import { type SetupOptions, setup } from './setup.ts'
 
@@ -17,7 +18,7 @@ export async function run(args: readonly string[]): Promise<Result> {
     const code = await setup(setupOptions(args.slice(1)), (line) => lines.push(line))
     return { code, stdout: stdout(), stderr: '' }
   } catch (error) {
-    return { code: 1, stdout: stdout(), stderr: `Error: ${error instanceof Error ? error.message : String(error)}\n` }
+    return { code: 1, stdout: stdout(), stderr: `Error: ${errorMessage(error)}\n` }
   }
 }
 
@@ -28,4 +29,10 @@ function setupOptions(args: string[]): SetupOptions {
     throw new Error(`--network must be mainnet or calibration, not ${network}`)
   }
   return { ...(network !== undefined && { network }), ...(grant !== undefined && { grant }) }
+}
+
+// viem's full message adds request arguments, a docs link and its version over several lines.
+function errorMessage(error: unknown): string {
+  if (error instanceof BaseError) return error.shortMessage
+  return error instanceof Error ? error.message : String(error)
 }

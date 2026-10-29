@@ -13,7 +13,7 @@ export const GROUP_KEY: Hex = '0x02ca08cf7e0222c8432adc159232b7eb'
 /** 2100-01-01. */
 const FAR_FUTURE = 4102444800
 
-export type GrantInput = {
+type GrantInput = {
   ownerKey?: Hex
   sessionKey?: Hex
   chainId?: number

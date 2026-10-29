@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout } from 'node:timers/promises'
 import { parseEnv } from 'node:util'
 import { calibration } from '@filoz/synapse-core/chains'
 import { AddPiecesPermission, CreateDataSetPermission, loginSync } from '@filoz/synapse-core/session-key'
@@ -38,7 +39,12 @@ test('setup sees a session key the owner authorized on calibnet', {
     origin: 'attic-calibnet-test',
   })
 
-  const after = runAttic(home, ['setup'])
+  // The next read can hit an RPC node that has not reached the login block yet.
+  let after = runAttic(home, ['setup'])
+  for (let attempt = 1; attempt < 6 && !after.stdout.includes('✓ Session key authorized'); attempt++) {
+    await setTimeout(10_000)
+    after = runAttic(home, ['setup'])
+  }
   assert.match(after.stdout, /✓ Session key authorized/, after.stdout + after.stderr)
   assert.match(after.stdout, /Session key expires \d{4}-\d{2}-\d{2} \(in 0 days\)/)
 })
