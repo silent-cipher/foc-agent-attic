@@ -1,17 +1,16 @@
 import { publicKeyOf } from '@filoz/keysmith'
-import { calibration, mainnet } from '@filoz/synapse-core/chains'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
 import { AddPiecesPermission, CreateDataSetPermission, getExpirations } from '@filoz/synapse-core/session-key'
 import { type Address, createPublicClient, formatUnits, http, parseUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { decrypt, encrypt } from './envelope.ts'
 import { type OpenedGrant, openGrant } from './grant.ts'
-import { type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
+import { CHAINS, type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
 
-const CHAINS = { mainnet, calibration }
-const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+/** What every Attic session key is authorized for. */
+export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 // The spike's exact deposit left 0 USDFC available, and the next upload then failed.
-const MIN_AVAILABLE_USDFC = 1
+export const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
 
 export type SetupOptions = { network: Network; consoleUrl: string; grant?: string }
@@ -24,15 +23,11 @@ export type SetupOptions = { network: Network; consoleUrl: string; grant?: strin
  */
 export async function setup(options: SetupOptions, print: (line: string) => void): Promise<number> {
   const path = sessionPath()
-  let session = readSession(path)
+  let session = readSession(path, options.network)
   if (session === undefined) {
     session = { sessionKey: generatePrivateKey(), network: options.network }
     writeSession(session, path)
     print(`✓ New session key saved to ${path} (owner-readable only)`)
-  } else if (options.network !== session.network) {
-    throw new Error(
-      `The saved session key is for ${session.network}, not ${options.network}. Delete ${path} to start over.`
-    )
   }
   const chain = CHAINS[session.network]
   const sessionAddress = privateKeyToAccount(session.sessionKey).address
@@ -63,10 +58,25 @@ export async function setup(options: SetupOptions, print: (line: string) => void
       storageApproved,
       availableFunds: account.availableFunds,
       approveUrl,
-      fundingUrl: `${options.consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${session.network}`,
+      fundingUrl: fundingUrl(options.consoleUrl, session.network),
     },
     print
   )
+}
+
+/** The console page that deposits USDFC and approves the storage service in one step. */
+export function fundingUrl(consoleUrl: string, network: Network): string {
+  return `${consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${network}`
+}
+
+/** USDFC base units (18 decimals) as a number with two decimals, the way setup and backup print them. */
+export function usdfc(amount: bigint): string {
+  return Number(formatUnits(amount, 18)).toFixed(2)
+}
+
+/** Whether `availableFunds` (USDFC base units) leave enough headroom for the next upload. */
+export function hasMinimumFunds(availableFunds: bigint): boolean {
+  return availableFunds >= parseUnits(String(MIN_AVAILABLE_USDFC), 18)
 }
 
 async function saveOrOpenGrant(
@@ -125,11 +135,13 @@ export function reportReadiness(
   now = Math.floor(Date.now() / 1000)
 ): number {
   const authorized = r.authorizedUntil > now
-  const funded = r.availableFunds >= parseUnits(String(MIN_AVAILABLE_USDFC), 18)
-  const usdfc = Number(formatUnits(r.availableFunds, 18)).toFixed(2)
+  const funded = hasMinimumFunds(r.availableFunds)
+  const available = usdfc(r.availableFunds)
   print(authorized ? '✓ Session key authorized' : `✗ Session key not authorized by ${r.owner}`)
   print(r.storageApproved ? '✓ Storage service approved' : '✗ Storage service not approved')
-  print(funded ? `✓ ${usdfc} USDFC available` : `✗ ${usdfc} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`)
+  print(
+    funded ? `✓ ${available} USDFC available` : `✗ ${available} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`
+  )
   if (authorized) {
     const expires = Math.min(r.authorizedUntil, r.grantExpires)
     const days = Math.floor((expires - now) / 86_400)
