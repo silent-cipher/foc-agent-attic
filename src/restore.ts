@@ -49,22 +49,21 @@ export async function restore(options: RestoreOptions, id: string, print: (line:
  * @returns How many files were written; existing identical files are left alone.
  */
 export function writeSessionFiles(home: string, files: readonly SessionFile[]): number {
-  const missing = files.filter(({ path, bytes }) => {
+  const missing = files.flatMap(({ path, bytes }) => {
     const target = resolve(home, path)
     const inside = relative(home, target)
     if (isAbsolute(path) || inside === '' || inside.split(sep)[0] === '..' || isAbsolute(inside)) {
       throw new Error(`The backup holds ${path}, which is outside ${home}. Nothing was written.`)
     }
-    if (!existsSync(target)) return true
+    if (!existsSync(target)) return [{ target, bytes }]
     if (sha256(readFileSync(target)) !== sha256(bytes)) {
       throw new Error(
         `${target} already exists and differs from the backup. Move it away to restore. Nothing was written.`
       )
     }
-    return false
+    return []
   })
-  for (const { path, bytes } of missing) {
-    const target = resolve(home, path)
+  for (const { target, bytes } of missing) {
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, bytes, { mode: 0o600, flag: 'wx' })
   }

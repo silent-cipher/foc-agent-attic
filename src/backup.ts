@@ -6,7 +6,7 @@ import { Synapse } from '@filoz/synapse-sdk'
 import { readClaudeSession } from './claude-code.ts'
 import { encrypt } from './envelope.ts'
 import { indexPath, readIndex, writeIndex } from './local-index.ts'
-import { type Header, pack } from './piece.ts'
+import { pack } from './piece.ts'
 import { CHAINS, type Network, openLogin } from './session.ts'
 import { fundingUrl, hasMinimumFunds, PERMISSIONS } from './setup.ts'
 
@@ -39,7 +39,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     session.files
   )
   const previous = index.sessions[id]
-  if (previous !== undefined && sameFiles(previous, piece.header)) {
+  if (previous !== undefined && JSON.stringify(previous.files) === JSON.stringify(piece.header.files)) {
     print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
     return 0
   }
@@ -96,8 +96,4 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
   print(`  Piece ${result.pieceCid} in data sets ${copies.map((copy) => copy.dataSetId).join(' and ')}`)
   return 0
-}
-
-function sameFiles(a: Header, b: Header): boolean {
-  return JSON.stringify(a.files) === JSON.stringify(b.files)
 }
