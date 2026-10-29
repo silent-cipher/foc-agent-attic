@@ -21,12 +21,19 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "node --test 'test/unit/**/*.test.ts'",
-    "test:e2e": "pnpm build && node --test 'test/e2e/**/*.test.ts'"
+    "test:e2e": "pnpm build && node --test 'test/e2e/**/*.test.ts'",
+    "test:calibnet": "pnpm build && node --test 'test/calibnet/**/*.test.ts'"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
     "@types/node": "26.5.1",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@filoz/keysmith": "0.1.0",
+    "@filoz/synapse-core": "0.10.2",
+    "filecoin-encryption-envelope": "0.1.0",
+    "viem": "2.57.13"
   }
 }
