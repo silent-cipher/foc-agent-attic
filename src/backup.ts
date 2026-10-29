@@ -12,15 +12,12 @@ import { fundingUrl, hasMinimumFunds, PERMISSIONS } from './setup.ts'
 
 /** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
 export const SOURCE = 'attic'
-const COPIES = 2
-// The SDK waits up to 2 hours for a copy that a provider never starts (synapse-sdk#1058).
-const COPY_TIMEOUT_MS = 5 * 60_000
 
 export type BackupOptions = { network: Network; consoleUrl: string; claudeHome: string }
 
 /**
  * Backs up one Claude Code session now, active or not, unless the index already holds these exact files.
- * The index entry is written only once every copy is committed, so a failure leaves the session to retry.
+ * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
  * @returns 0 when backed up, 2 when the owner has something to do in the console.
  */
@@ -59,7 +56,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   }
 
   const envelope = await encrypt(grant, piece.bytes)
-  step(`Encrypted ${session.files.length} files into ${envelope.length} bytes; choosing ${COPIES} storage providers`)
+  step(`Encrypted ${session.files.length} files into ${envelope.length} bytes; choosing a storage provider`)
   const synapse = Synapse.create({
     account: grant.owner,
     chain,
@@ -68,13 +65,13 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     source: SOURCE,
     pieceBatching: false,
   })
-  const target = {
-    copies: COPIES,
+  // One copy for v1: on calibnet the second provider's copy has stalled at "pending" for the SDK's full wait.
+  const contexts = await synapse.storage.createContexts({
+    copies: 1,
     // filecoin-pin's tags for an encrypted data set, so the console reads it as one.
     metadata: { 'foc/enc': '1', [KEYSPACE_ID_KEY]: grant.grant.keyspace, [COMMITMENT_KEY]: commitment(grant.key) },
-  }
-  const contexts = await synapse.storage.createContexts(target)
-  step(`Checking funds for providers ${contexts.map((context) => context.provider.id).join(' and ')}`)
+  })
+  step(`Checking funds for provider ${contexts.map((context) => context.provider.id).join(', ')}`)
   const [costs, account] = await Promise.all([
     synapse.storage.calculateMultiContextCosts(contexts, { pieceSizes: [BigInt(envelope.length)] }),
     getAccountSummary(synapse.client, { address: grant.owner }),
@@ -86,42 +83,15 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     print(fundingUrl(options.consoleUrl, options.network))
     return 2
   }
-  // Not `{ contexts }`: explicit contexts turn off the SDK's retry on another provider when a copy fails.
-  const pullStatus = new Map<bigint, string>()
-  // Aborting reaches only the copy: the SDK's commits take no signal, so the first copy still lands.
-  const stopCopy = new AbortController()
-  let copyTimer: NodeJS.Timeout | undefined
   const result = await synapse.storage.upload(envelope, {
-    ...target,
-    signal: stopCopy.signal,
+    contexts,
     callbacks: {
-      onProviderSelected: (provider) => step(`Selected provider ${provider.id} (${provider.pdp.serviceURL})`),
       onStored: (providerId, pieceCid) => step(`Stored on provider ${providerId} as piece ${pieceCid}`),
-      // Called on every poll; only a change of status is news.
-      onPullProgress: (providerId, _, status) => {
-        if (pullStatus.get(providerId) !== status) step(`Copy to provider ${providerId}: ${status}`)
-        pullStatus.set(providerId, status)
-        copyTimer ??= setTimeout(() => stopCopy.abort(), COPY_TIMEOUT_MS).unref()
-      },
-      onCopyComplete: (providerId) => {
-        clearTimeout(copyTimer)
-        step(`Copied to provider ${providerId}`)
-      },
-      onCopyFailed: (providerId, _, error) => step(`Copy to provider ${providerId} failed: ${error.message}`),
       onPiecesAdded: (hash, providerId) => step(`Committing on provider ${providerId}, transaction ${hash}`),
       onPiecesConfirmed: (dataSetId, providerId) =>
         step(`Committed on provider ${providerId} in data set ${dataSetId}`),
     },
   })
-  clearTimeout(copyTimer)
-  if (!result.complete) {
-    const reason = stopCopy.signal.aborted
-      ? ` The second provider did not finish its copy within ${COPY_TIMEOUT_MS / 60_000} minutes.`
-      : ''
-    throw new Error(
-      `Only ${result.copies.length} of ${COPIES} copies were committed, so the backup was not recorded.${reason} Run backup again later.`
-    )
-  }
   const copies = result.copies.map((copy) => ({
     providerId: String(copy.providerId),
     dataSetId: String(copy.dataSetId),
@@ -130,6 +100,6 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   index.sessions[id] = { ...piece.header, pieceCid: result.pieceCid.toString(), size: envelope.length, copies }
   writeIndex(index, path)
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
-  print(`  Piece ${result.pieceCid} in data sets ${copies.map((copy) => copy.dataSetId).join(' and ')}`)
+  print(`  Piece ${result.pieceCid} in data set ${copies.map((copy) => copy.dataSetId).join(', ')}`)
   return 0
 }

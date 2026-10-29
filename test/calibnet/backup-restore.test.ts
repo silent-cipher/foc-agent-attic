@@ -57,7 +57,7 @@ test('a backed-up session, deleted locally, restores and Claude Code resumes it'
 
   const paths = writeClaudeSession(home, id)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
-  const backedUp = await runAtticLive(home, ['backup', id], ENV, 900_000)
+  const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
   assert.equal(backedUp.status, 0, backedUp.stdout + backedUp.stderr)
   assert.match(backedUp.stdout, new RegExp(`✓ Backed up session ${id}: 2 files`))
 

@@ -6,7 +6,7 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" backup:*)
 
 Arguments: $ARGUMENTS
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" backup <session id>` with the session ID from the arguments, and a 10-minute timeout: an upload to two storage providers can take several minutes. If the arguments hold no session ID, ask for one and stop.
+Run `node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" backup <session id>` with the session ID from the arguments, and a 10-minute timeout: an upload and its on-chain commit can take several minutes. If the arguments hold no session ID, ask for one and stop.
 
 It prints each step as it goes (`[12s] Uploading to provider 9 …`). If the command times out or is stopped, show the last steps it printed: they say where it was, and any transaction hash can be looked up on the explorer.
 
