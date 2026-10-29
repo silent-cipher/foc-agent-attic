@@ -11,7 +11,7 @@ export type RestoreOptions = { network: Network; claudeHome: string }
 
 /**
  * Downloads a session's newest backup, checks it, and writes its files back into Claude Code's home folder.
- * Nothing is written unless every file decrypts, matches its SHA-256 and can be written.
+ * Nothing is written unless the piece decrypts and every file matches its SHA-256 and passes `writeSessionFiles`' checks.
  */
 export async function restore(options: RestoreOptions, id: string, print: (line: string) => void): Promise<number> {
   const entry = readIndex(indexPath()).sessions[id]

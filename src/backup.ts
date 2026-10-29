@@ -1,9 +1,8 @@
 import { hostname } from 'node:os'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
-import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
+import { getAccountSummary } from '@filoz/synapse-core/pay'
 import { fromSecp256k1 } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
-import { createPublicClient, http } from 'viem'
 import { readClaudeSession } from './claude-code.ts'
 import { encrypt } from './envelope.ts'
 import { indexPath, readIndex, writeIndex } from './local-index.ts'
@@ -48,20 +47,9 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   const { grant, sessionKey: privateKey } = await openLogin(options.network)
   const chain = CHAINS[options.network]
   const sessionKey = fromSecp256k1({ privateKey, root: grant.owner, chain })
-  const client = createPublicClient({ chain, transport: http() })
-  const [, storageApproved, account] = await Promise.all([
-    sessionKey.syncExpirations(PERMISSIONS),
-    isFwssMaxApproved(client, { clientAddress: grant.owner }),
-    getAccountSummary(client, { address: grant.owner }),
-  ])
+  await sessionKey.syncExpirations(PERMISSIONS)
   if (!sessionKey.hasPermissions(PERMISSIONS)) {
     print(`✗ Session key not authorized by ${grant.owner}, or its authorization expired. Run /attic:setup.`)
-    return 2
-  }
-  if (!storageApproved || !hasMinimumFunds(account.availableFunds)) {
-    print('✗ Not enough USDFC available, or the storage service is not approved. Nothing was uploaded.')
-    print('Deposit USDFC and approve the storage service in one step:')
-    print(fundingUrl(options.consoleUrl, options.network))
     return 2
   }
 
@@ -74,11 +62,25 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     source: SOURCE,
     pieceBatching: false,
   })
-  const result = await synapse.storage.upload(envelope, {
+  const target = {
     copies: COPIES,
     // filecoin-pin's tags for an encrypted data set, so the console reads it as one.
     metadata: { 'foc/enc': '1', [KEYSPACE_ID_KEY]: grant.grant.keyspace, [COMMITMENT_KEY]: commitment(grant.key) },
-  })
+  }
+  const contexts = await synapse.storage.createContexts(target)
+  const [costs, account] = await Promise.all([
+    synapse.storage.calculateMultiContextCosts(contexts, { pieceSizes: [BigInt(envelope.length)] }),
+    getAccountSummary(synapse.client, { address: grant.owner }),
+  ])
+  // Funding the exact cost left nothing for the next upload in the spike, so setup's headroom applies too.
+  if (!costs.ready || !hasMinimumFunds(account.availableFunds)) {
+    print('✗ Not enough USDFC available, or the storage service is not approved. Nothing was uploaded.')
+    print('Deposit USDFC and approve the storage service in one step:')
+    print(fundingUrl(options.consoleUrl, options.network))
+    return 2
+  }
+  // Not `{ contexts }`: explicit contexts turn off the SDK's retry on another provider when a copy fails.
+  const result = await synapse.storage.upload(envelope, target)
   if (!result.complete) {
     throw new Error(
       `Only ${result.copies.length} of ${COPIES} copies were committed, so the backup was not recorded. Run backup again.`
