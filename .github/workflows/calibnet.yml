@@ -23,12 +23,13 @@ jobs:
 
       # The backup test checks Claude Code itself can resume a restored session. Its postinstall
       # script puts the `claude` binary in place, and npm skips install scripts unless allowed.
-      # Installed under a known folder: after a global install, `claude` was not on PATH in CI.
+      # After a global install, `claude` was not on PATH in CI, so its bin folder is added by hand.
       - name: Install Claude Code
         run: |
-          npm install --prefix "$RUNNER_TEMP/claude-code" --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@2.1.312
-          "$RUNNER_TEMP/claude-code/node_modules/.bin/claude" --version
-          echo "$RUNNER_TEMP/claude-code/node_modules/.bin" >> "$GITHUB_PATH"
+          npm install --global --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@2.1.312
+          bin="$(npm prefix --global)/bin"
+          "$bin/claude" --version
+          echo "$bin" >> "$GITHUB_PATH"
 
       - name: Build and calibnet tests
         run: pnpm test:calibnet
