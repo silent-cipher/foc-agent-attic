@@ -1,10 +1,9 @@
 import { parseArgs } from 'node:util'
 import { BaseError } from 'viem'
 import pkg from '../package.json' with { type: 'json' }
-import { backup } from './backup.ts'
+import { type BackupOptions, backup } from './backup.ts'
 import { claudeHome } from './claude-code.ts'
 import { restore } from './restore.ts'
-import type { Network } from './session.ts'
 import { setup } from './setup.ts'
 
 /** How one CLI run ended. Its output went to `write` as it was printed, so a long upload shows where it is. */
@@ -34,11 +33,9 @@ export async function run(args: readonly string[], write: (text: string) => void
   }
 }
 
-type EnvOptions = { network: Network; consoleUrl: string; claudeHome: string }
-
 // ATTIC_NETWORK and ATTIC_CONSOLE_URL are test switches, never user options: calibration guarantees no
 // storage, and a staging or local console is only for trying console changes before they ship.
-function envOptions(env: NodeJS.ProcessEnv): EnvOptions {
+function envOptions(env: NodeJS.ProcessEnv): BackupOptions {
   const { ATTIC_NETWORK: network, ATTIC_CONSOLE_URL: consoleUrl } = env
   if (network !== undefined && network !== 'calibration') {
     throw new Error(`ATTIC_NETWORK can only be calibration, for testing, not ${network}`)

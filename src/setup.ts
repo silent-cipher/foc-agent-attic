@@ -23,15 +23,11 @@ export type SetupOptions = { network: Network; consoleUrl: string; grant?: strin
  */
 export async function setup(options: SetupOptions, print: (line: string) => void): Promise<number> {
   const path = sessionPath()
-  let session = readSession(path)
+  let session = readSession(path, options.network)
   if (session === undefined) {
     session = { sessionKey: generatePrivateKey(), network: options.network }
     writeSession(session, path)
     print(`✓ New session key saved to ${path} (owner-readable only)`)
-  } else if (options.network !== session.network) {
-    throw new Error(
-      `The saved session key is for ${session.network}, not ${options.network}. Delete ${path} to start over.`
-    )
   }
   const chain = CHAINS[session.network]
   const sessionAddress = privateKeyToAccount(session.sessionKey).address
@@ -71,6 +67,11 @@ export async function setup(options: SetupOptions, print: (line: string) => void
 /** The console page that deposits USDFC and approves the storage service in one step. */
 export function fundingUrl(consoleUrl: string, network: Network): string {
   return `${consoleUrl}/console?deposit=${SUGGESTED_DEPOSIT_USDFC}&operator=fwss&network=${network}`
+}
+
+/** USDFC base units (18 decimals) as a number with two decimals, the way setup and backup print them. */
+export function usdfc(amount: bigint): string {
+  return Number(formatUnits(amount, 18)).toFixed(2)
 }
 
 /** Whether `availableFunds` (USDFC base units) leave enough headroom for the next upload. */
@@ -135,10 +136,12 @@ export function reportReadiness(
 ): number {
   const authorized = r.authorizedUntil > now
   const funded = hasMinimumFunds(r.availableFunds)
-  const usdfc = Number(formatUnits(r.availableFunds, 18)).toFixed(2)
+  const available = usdfc(r.availableFunds)
   print(authorized ? '✓ Session key authorized' : `✗ Session key not authorized by ${r.owner}`)
   print(r.storageApproved ? '✓ Storage service approved' : '✗ Storage service not approved')
-  print(funded ? `✓ ${usdfc} USDFC available` : `✗ ${usdfc} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`)
+  print(
+    funded ? `✓ ${available} USDFC available` : `✗ ${available} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`
+  )
   if (authorized) {
     const expires = Math.min(r.authorizedUntil, r.grantExpires)
     const days = Math.floor((expires - now) / 86_400)

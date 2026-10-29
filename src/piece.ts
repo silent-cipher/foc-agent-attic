@@ -12,11 +12,11 @@ export type Header = {
   files: FileEntry[]
 }
 
-export type FileEntry = { path: string; size: number; sha256: string }
+type FileEntry = { path: string; size: number; sha256: string }
 
 export type SessionFile = { path: string; bytes: Uint8Array }
 
-export function sha256(bytes: Uint8Array): string {
+function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 

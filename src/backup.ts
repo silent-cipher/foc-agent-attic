@@ -1,18 +1,15 @@
 import { hostname } from 'node:os'
+import { isDeepStrictEqual } from 'node:util'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { getAccountSummary } from '@filoz/synapse-core/pay'
 import { fromSecp256k1 } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
-import { formatUnits } from 'viem'
 import { readClaudeSession } from './claude-code.ts'
 import { encrypt } from './envelope.ts'
 import { indexPath, readIndex, writeIndex } from './local-index.ts'
 import { pack } from './piece.ts'
-import { CHAINS, type Network, openLogin } from './session.ts'
-import { fundingUrl, hasMinimumFunds, MIN_AVAILABLE_USDFC, PERMISSIONS } from './setup.ts'
-
-/** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
-export const SOURCE = 'attic'
+import { CHAINS, type Network, openLogin, SOURCE } from './session.ts'
+import { fundingUrl, hasMinimumFunds, MIN_AVAILABLE_USDFC, PERMISSIONS, usdfc } from './setup.ts'
 
 export type BackupOptions = { network: Network; consoleUrl: string; claudeHome: string }
 
@@ -39,7 +36,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     session.files
   )
   const previous = index.sessions[id]
-  if (previous?.network === options.network && JSON.stringify(previous.files) === JSON.stringify(piece.header.files)) {
+  if (previous?.network === options.network && isDeepStrictEqual(previous.files, piece.header.files)) {
     print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
     return 0
   }
@@ -116,7 +113,6 @@ export function fundingProblems(
   costs: { needsFwssMaxApproval: boolean; depositNeeded: bigint },
   availableFunds: bigint
 ): string[] {
-  const usdfc = (amount: bigint) => Number(formatUnits(amount, 18)).toFixed(2)
   const problems = costs.needsFwssMaxApproval ? ['✗ Storage service not approved'] : []
   if (costs.depositNeeded > 0n) {
     problems.push(`✗ ${usdfc(availableFunds)} USDFC available, ${usdfc(costs.depositNeeded)} short of this upload`)

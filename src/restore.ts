@@ -1,11 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { Synapse } from '@filoz/synapse-sdk'
-import { SOURCE } from './backup.ts'
 import { decrypt } from './envelope.ts'
 import { indexPath, readIndex } from './local-index.ts'
 import { type SessionFile, unpack } from './piece.ts'
-import { CHAINS, type Network, openLogin } from './session.ts'
+import { CHAINS, type Network, openLogin, SOURCE } from './session.ts'
 
 export type RestoreOptions = { network: Network; claudeHome: string }
 

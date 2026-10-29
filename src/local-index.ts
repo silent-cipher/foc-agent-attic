@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import type { Header } from './piece.ts'
-import type { Network } from './session.ts'
+import { type Network, writePrivateFile } from './session.ts'
 
 /** One backed-up session: its piece header and where the piece is stored. */
 export type IndexEntry = Header & {
@@ -32,12 +32,6 @@ export function readIndex(path: string): Index {
   return index
 }
 
-/** Replaces the index in one rename, so a crash never leaves it half-written. Owner-readable only. */
 export function writeIndex(index: Index, path: string): void {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  const tmp = `${path}.tmp`
-  // Removed first: `mode` applies only to a file the write creates.
-  rmSync(tmp, { force: true })
-  writeFileSync(tmp, `${JSON.stringify(index, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
-  renameSync(tmp, path)
+  writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
 }
