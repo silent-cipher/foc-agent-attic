@@ -8,7 +8,7 @@ export const STRANGER_KEY: Hex = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c
 export const SESSION_KEY: Hex = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a'
 
 export const CALIBRATION = 314159
-const GROUP_KEY: Hex = '0x02ca08cf7e0222c8432adc159232b7eb'
+export const GROUP_KEY: Hex = '0x02ca08cf7e0222c8432adc159232b7eb'
 
 /** 2100-01-01. */
 const FAR_FUTURE = 4102444800

@@ -3,11 +3,25 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { privateKeyToAccount } from 'viem/accounts'
+import { GROUP_KEY, makeGrant, OWNER_KEY, SESSION_KEY } from '../make-grant.ts'
 import { type Home, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
+const CALIBRATION = { ATTIC_NETWORK: 'calibration' }
+const KEYHOLDER = { network: 'calibration', owner: privateKeyToAccount(OWNER_KEY).address, groupKey: GROUP_KEY }
 
-function writeIndexEntry(home: Home, paths: string[], network = 'mainnet'): void {
+// A login as the console leaves one, written directly: opening it needs no network.
+async function logIn(home: Home): Promise<void> {
+  mkdirSync(join(home.root, '.attic'), { recursive: true })
+  const grant = await makeGrant()
+  writeFileSync(
+    join(home.root, '.attic', 'session.env'),
+    `SESSION_KEY=${SESSION_KEY}\nNETWORK=calibration\nGRANT=${grant}\n`
+  )
+}
+
+function writeIndexEntry(home: Home, paths: string[], keyholder: Partial<typeof KEYHOLDER> = {}): void {
   const files = paths.map((path) => {
     const bytes = readFileSync(join(home.claude, path))
     return { path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
@@ -20,7 +34,8 @@ function writeIndexEntry(home: Home, paths: string[], network = 'mainnet'): void
     machine: 'e2e',
     lastWriteAt: '2026-10-28T09:12:00.000Z',
     files,
-    network,
+    ...KEYHOLDER,
+    ...keyholder,
     pieceCid: 'bafkzcibcaapeh2qvtlm6tdodcaa6s3jfohqc6rqmfhwdgbm2nj4bsgzddlqbu3a',
     size: 1234,
     copies: [],
@@ -48,34 +63,30 @@ test('backup before setup says to run setup', async () => {
   assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
 })
 
-test('backup of a session the index already holds unchanged uploads nothing, without logging in', async () => {
+test('backup of a session the index already holds unchanged, for this login, uploads nothing', async () => {
   const home = await tempHome()
+  await logIn(home)
   writeIndexEntry(home, writeClaudeSession(home, ID))
-  const result = runAttic(home, ['backup', ID])
+  const result = runAttic(home, ['backup', ID], CALIBRATION)
   assert.equal(result.stderr, '')
   assert.equal(result.status, 0)
   assert.match(result.stdout, new RegExp(`✓ Session ${ID} is already backed up, unchanged`))
 })
 
-test('backup of a session that changed since its index entry goes on to upload it', async () => {
-  const home = await tempHome()
-  const paths = writeClaudeSession(home, ID)
-  writeIndexEntry(home, paths)
-  writeFileSync(join(home.claude, paths[0] ?? ''), '{"cwd":"/tmp/attic-e2e"}\n{"more":"messages"}\n')
-  const result = runAttic(home, ['backup', ID])
-  assert.equal(result.status, 1)
-  assert.match(result.stderr, /Attic is not logged in/)
-})
-
-test('a backup on calibration does not count as one on mainnet', async () => {
-  const home = await tempHome()
-  writeIndexEntry(home, writeClaudeSession(home, ID), 'calibration')
-  const backedUp = runAttic(home, ['backup', ID])
-  assert.equal(backedUp.status, 1)
-  assert.match(backedUp.stderr, /Attic is not logged in/)
-  const restored = runAttic(home, ['restore', ID])
-  assert.equal(restored.status, 1)
-  assert.match(restored.stderr, new RegExp(`Session ${ID} is backed up on calibration, not mainnet`))
+test('restore refuses a backup that this login cannot decrypt, before downloading it', async () => {
+  const others: Partial<typeof KEYHOLDER>[] = [
+    { groupKey: '0x0000000000000000000000000000000a' },
+    { network: 'mainnet' },
+  ]
+  for (const keyholder of others) {
+    const home = await tempHome()
+    await logIn(home)
+    writeIndexEntry(home, writeClaudeSession(home, ID), keyholder)
+    const result = runAttic(home, ['restore', ID], CALIBRATION)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, new RegExp(`Session ${ID} is backed up under group key .* but this login is for`))
+    assert.doesNotMatch(result.stdout, /Downloading/)
+  }
 })
 
 test('restore of a session with no backup writes nothing', async () => {

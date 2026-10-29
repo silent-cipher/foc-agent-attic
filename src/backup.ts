@@ -1,12 +1,11 @@
 import { hostname } from 'node:os'
-import { isDeepStrictEqual } from 'node:util'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { getAccountSummary } from '@filoz/synapse-core/pay'
 import { fromSecp256k1 } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
 import { readClaudeSession } from './claude-code.ts'
 import { encrypt } from './envelope.ts'
-import { indexPath, readIndex, writeIndex } from './local-index.ts'
+import { indexPath, isUpToDate, keyholderOf, readIndex, writeIndex } from './local-index.ts'
 import { pack } from './piece.ts'
 import { CHAINS, type Network, openLogin, SOURCE } from './session.ts'
 import { fundingUrl, hasMinimumFunds, MIN_AVAILABLE_USDFC, PERMISSIONS, usdfc } from './setup.ts'
@@ -14,7 +13,8 @@ import { fundingUrl, hasMinimumFunds, MIN_AVAILABLE_USDFC, PERMISSIONS, usdfc } 
 export type BackupOptions = { network: Network; consoleUrl: string; claudeHome: string }
 
 /**
- * Backs up one Claude Code session now, active or not, unless the index already holds these exact files.
+ * Backs up one Claude Code session now, active or not, unless the index already holds these exact files
+ * under this login's group key.
  * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
  * @returns 0 when backed up, 2 when the owner has something to do in the console.
@@ -35,15 +35,16 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
     },
     session.files
   )
+  const { grant, sessionKey: privateKey } = await openLogin(options.network)
+  const keyholder = keyholderOf(options.network, grant)
   const previous = index.sessions[id]
-  if (previous?.network === options.network && isDeepStrictEqual(previous.files, piece.header.files)) {
+  if (previous !== undefined && isUpToDate(previous, keyholder, piece.header.files)) {
     print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
     return 0
   }
 
   const started = Date.now()
   const step = (line: string) => print(`[${Math.round((Date.now() - started) / 1000)}s] ${line}`)
-  const { grant, sessionKey: privateKey } = await openLogin(options.network)
   step(`Checking session key authorization on ${options.network}`)
   const chain = CHAINS[options.network]
   const sessionKey = fromSecp256k1({ privateKey, root: grant.owner, chain })
@@ -97,7 +98,7 @@ export async function backup(options: BackupOptions, id: string, print: (line: s
   }))
   index.sessions[id] = {
     ...piece.header,
-    network: options.network,
+    ...keyholder,
     pieceCid: result.pieceCid.toString(),
     size: envelope.length,
     copies,

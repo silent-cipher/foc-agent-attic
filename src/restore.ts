@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { Synapse } from '@filoz/synapse-sdk'
 import { decrypt } from './envelope.ts'
-import { indexPath, readIndex } from './local-index.ts'
+import { indexPath, type Keyholder, keyholderOf, readIndex, sameKeyholder } from './local-index.ts'
 import { type SessionFile, unpack } from './piece.ts'
 import { CHAINS, type Network, openLogin, SOURCE } from './session.ts'
 
@@ -15,10 +15,14 @@ export type RestoreOptions = { network: Network; claudeHome: string }
 export async function restore(options: RestoreOptions, id: string, print: (line: string) => void): Promise<number> {
   const entry = readIndex(indexPath()).sessions[id]
   if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
-  if (entry.network !== options.network) {
-    throw new Error(`Session ${id} is backed up on ${entry.network}, not ${options.network}. Nothing was written.`)
-  }
   const { grant } = await openLogin(options.network)
+  const keyholder = keyholderOf(options.network, grant)
+  if (!sameKeyholder(entry, keyholder)) {
+    throw new Error(
+      `Session ${id} is backed up under ${describe(entry)}, but this login is for ${describe(keyholder)}. ` +
+        'It cannot decrypt that backup. Nothing was written.'
+    )
+  }
   const synapse = Synapse.create({ account: grant.owner, chain: CHAINS[options.network], source: SOURCE })
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
   const envelope = await synapse.storage.download({ pieceCid: entry.pieceCid })
@@ -78,3 +82,5 @@ export function writeSessionFiles(home: string, files: readonly SessionFile[]): 
   }
   return missing.length
 }
+
+const describe = (k: Keyholder) => `group key ${k.groupKey} of ${k.owner} on ${k.network}`
