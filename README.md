@@ -31,6 +31,6 @@ Then run `/attic:version`, or `/attic:setup` to log in.
 
 ## Logging in
 
-`/attic:setup` makes a session key in `~/.attic/session.env` (owner-readable only) and prints a Filecoin Cloud console link. Approve the key there with your wallet, then paste the Grant (`fgr1_…`) the console shows. Attic never sees the wallet key: the Grant gives the session key the owner's group key, and every backup is encrypted under its `attic` scope. Setup then checks the key is authorized, the storage service is approved and USDFC is available, and says when the key expires.
+`/attic:setup` makes a session key in `~/.attic/session.env` (owner-readable only) and prints a Filecoin Cloud console link. Approve the key there with your wallet, then paste the Grant (`fgr1_…`) the console shows. Attic never sees the wallet key: the Grant gives the session key the owner's group key, and every backup is encrypted under its `attic` scope. Setup then checks the key is authorized, the storage service is approved and USDFC is available, and says when the key expires. Its console link renews the same session key at any time: approve it again and paste the new Grant.
 
 A Grant can't be revoked: anyone holding `session.env` can read every backup under that group key. Revoking the key on the console's Session keys page stops new uploads.

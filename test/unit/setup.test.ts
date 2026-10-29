@@ -29,7 +29,13 @@ test('a ready account exits 0 and names the earlier of the two expiries', () => 
   assert.match(text, /✓ Storage service approved/)
   assert.match(text, /✓ 3\.46 USDFC available/)
   assert.match(text, /Session key expires 2027-01-25 \(in 10 days\)/)
-  assert.doesNotMatch(text, /pay\.filecoin\.cloud/)
+  assert.ok(!text.includes(ready.fundingUrl), text)
+})
+
+test('an authorized key still prints the approve link, so it can be renewed before it expires', () => {
+  const { text } = report({})
+  assert.match(text, /To renew it before then, approve it again in the console and run setup with the new Grant:/)
+  assert.ok(text.split('\n').includes(ready.approveUrl), text)
 })
 
 test('an unauthorized key prints the approve link', () => {

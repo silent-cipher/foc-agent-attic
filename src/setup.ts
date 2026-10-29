@@ -134,11 +134,11 @@ export function reportReadiness(
     const expires = Math.min(r.authorizedUntil, r.grantExpires)
     const days = Math.floor((expires - now) / 86_400)
     print(`Session key expires ${new Date(expires * 1000).toISOString().slice(0, 10)} (in ${days} days).`)
-    print('Run setup again before then to log in again.')
+    print('To renew it before then, approve it again in the console and run setup with the new Grant:')
   } else {
     print('Approve this session key in the Filecoin Cloud console:')
-    print(r.approveUrl)
   }
+  print(r.approveUrl)
   if (!r.storageApproved || !funded) {
     print('Deposit USDFC and approve the storage service in one step:')
     print(r.fundingUrl)
