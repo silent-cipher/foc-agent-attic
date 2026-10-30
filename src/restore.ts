@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { indexPath, type Keyholder, keyholderOf, readIndex, sameKeyholder } from './local-index.ts'
+import { indexPath, readIndex } from './local-index.ts'
+import { type Keyholder, type Network, openLogin, sameKeyholder } from './login.ts'
 import { openPiece, type SessionFile } from './piece.ts'
-import { type Network, openLogin } from './session.ts'
 import type { Connect } from './storage.ts'
 
 export type RestoreOptions = { network: Network; claudeHome: string }
@@ -20,15 +20,14 @@ export async function restore(
   const entry = readIndex(indexPath()).sessions[id]
   if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
   const login = await openLogin(options.network)
-  const keyholder = keyholderOf(options.network, login.grant)
-  if (!sameKeyholder(entry, keyholder)) {
+  if (!sameKeyholder(entry, login.keyholder)) {
     throw new Error(
-      `Session ${id} is backed up under ${describe(entry)}, but this login is for ${describe(keyholder)}. ` +
+      `Session ${id} is backed up under ${describe(entry)}, but this login is for ${describe(login.keyholder)}. ` +
         'It cannot decrypt that backup. Nothing was written.'
     )
   }
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
-  const envelope = await connect(login, options.network, print).download(entry.pieceCid)
+  const envelope = await connect(login, print).download(entry.pieceCid)
   const { header, files } = await openPiece(login.grant, envelope).catch((error: unknown) => {
     throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`, { cause: error })
   })

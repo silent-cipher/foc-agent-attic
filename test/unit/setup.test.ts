@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { parseUnits } from 'viem'
-import { type Readiness, reportReadiness } from '../../src/setup.ts'
+import { parseEnv } from 'node:util'
+import { isHex, parseUnits } from 'viem'
+import { type Readiness, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
+import { type Home, tempHome } from '../e2e/helpers.ts'
+import { makeGrant, SESSION_KEY, STRANGER_KEY } from '../make-grant.ts'
+import { memoryStorage } from '../memory-storage.ts'
 
 const NOW = 1_800_000_000
 const DAY = 86_400
@@ -56,4 +62,51 @@ test('low funds or no storage approval print the pre-filled funding link', () =>
     assert.ok(text.includes(ready.fundingUrl), text)
   }
   assert.match(report({ availableFunds: 0n }).text, /✗ 0\.00 USDFC available \(keep at least 1\)/)
+})
+
+// Attic keeps its login under HOME.
+async function home(): Promise<Home> {
+  const home = await tempHome()
+  process.env.HOME = home.root
+  return home
+}
+
+const saved = (home: Home) => parseEnv(readFileSync(join(home.root, '.attic', 'session.env'), 'utf8'))
+
+async function runSetup(grant?: string): Promise<{ code: number; text: string }> {
+  const options: SetupOptions = { network: 'calibration', consoleUrl: 'https://pay.filecoin.cloud' }
+  const lines: string[] = []
+  const code = await setup(
+    grant === undefined ? options : { ...options, grant },
+    (line) => lines.push(line),
+    memoryStorage().connect
+  )
+  return { code, text: lines.join('\n') }
+}
+
+test('setup saves a pasted Grant and reports a ready account', async () => {
+  const root = await home()
+  assert.equal((await runSetup()).code, 2)
+  const sessionKey = saved(root).SESSION_KEY
+  assert.ok(sessionKey !== undefined && isHex(sessionKey))
+
+  const { code, text } = await runSetup(await makeGrant({ sessionKey }))
+  assert.equal(code, 0, text)
+  assert.match(text, /✓ Grant saved for group key 0x/)
+  assert.match(text, /✓ Session key authorized\n✓ Storage service approved\n✓ 5\.00 USDFC available/)
+  assert.ok(saved(root).GRANT?.startsWith('fgr1_'))
+  assert.equal((await runSetup()).code, 0)
+})
+
+test('a saved Grant that no longer opens says why and prints the approve link', async () => {
+  const root = await home()
+  await runSetup()
+  const file = join(root.root, '.attic', 'session.env')
+  const text = readFileSync(file, 'utf8').replace(/SESSION_KEY=.*/, `SESSION_KEY=${SESSION_KEY}`)
+  writeFileSync(file, `${text}GRANT=${await makeGrant({ sessionKey: STRANGER_KEY })}\n`)
+
+  const result = await runSetup()
+  assert.equal(result.code, 2)
+  assert.match(result.text, /✗ The saved Grant no longer opens\. /)
+  assert.match(result.text, /Approve this session key in the Filecoin Cloud console, then copy the Grant/)
 })

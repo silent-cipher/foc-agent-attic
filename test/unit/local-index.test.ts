@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { type IndexEntry, isUpToDate, type Keyholder } from '../../src/local-index.ts'
+import { type IndexEntry, isUpToDate } from '../../src/local-index.ts'
+import type { Keyholder } from '../../src/login.ts'
 
 const KEYHOLDER: Keyholder = {
   network: 'mainnet',

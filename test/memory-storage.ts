@@ -7,19 +7,22 @@ const FUNDED: Quote = { storageApproved: true, depositNeeded: 0n, availableFunds
 
 type MemoryState = {
   pieces: Map<string, Uint8Array>
-  authorized: boolean
+  /** Unix seconds, as `Storage.authorizedUntil` returns it. */
+  authorizedUntil: number
   quote: Quote
   storeError?: Error | undefined
 }
 
 /**
  * Attic's storage held in memory, for tests: the real envelopes, by piece CID.
- * Change `authorized`, `quote` or `storeError` to play an account in another state.
+ * Change `authorizedUntil`, `quote` or `storeError` to play an account in another state.
  */
 export function memoryStorage() {
-  const state: MemoryState = { pieces: new Map(), authorized: true, quote: FUNDED }
+  // 2100-01-01.
+  const state: MemoryState = { pieces: new Map(), authorizedUntil: 4102444800, quote: FUNDED }
   const connect: Connect = () => ({
-    isAuthorized: async () => state.authorized,
+    authorizedUntil: async () => state.authorizedUntil,
+    account: async () => ({ storageApproved: state.quote.storageApproved, availableFunds: state.quote.availableFunds }),
     quote: async () => state.quote,
     async store(envelope) {
       if (state.storeError !== undefined) throw state.storeError
