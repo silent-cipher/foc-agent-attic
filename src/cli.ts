@@ -5,6 +5,7 @@ import { type BackupOptions, backup } from './backup.ts'
 import { claudeHome } from './claude-code.ts'
 import { restore } from './restore.ts'
 import { setup } from './setup.ts'
+import { synapseStorage } from './storage.ts'
 
 /** How one CLI run ended. Its output went to `write` as it was printed, so a long upload shows where it is. */
 export type Result = { code: number; stderr: string }
@@ -26,7 +27,7 @@ export async function run(args: readonly string[], write: (text: string) => void
     const code =
       name === 'setup'
         ? await setup({ ...options, ...grantOption(rest) }, print)
-        : await (name === 'backup' ? backup : restore)(options, sessionId(rest), print)
+        : await (name === 'backup' ? backup : restore)(options, sessionId(rest), print, synapseStorage)
     return { code, stderr: '' }
   } catch (error) {
     return { code: 1, stderr: `Error: ${errorMessage(error)}\n` }

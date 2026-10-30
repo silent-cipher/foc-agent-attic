@@ -4,22 +4,12 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { privateKeyToAccount } from 'viem/accounts'
-import { GROUP_KEY, makeGrant, OWNER_KEY, SESSION_KEY } from '../make-grant.ts'
-import { type Home, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
+import { GROUP_KEY, OWNER_KEY } from '../make-grant.ts'
+import { type Home, logIn, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
 const CALIBRATION = { ATTIC_NETWORK: 'calibration' }
 const KEYHOLDER = { network: 'calibration', owner: privateKeyToAccount(OWNER_KEY).address, groupKey: GROUP_KEY }
-
-// A login as the console leaves one, written directly: opening it needs no network.
-async function logIn(home: Home): Promise<void> {
-  mkdirSync(join(home.root, '.attic'), { recursive: true })
-  const grant = await makeGrant()
-  writeFileSync(
-    join(home.root, '.attic', 'session.env'),
-    `SESSION_KEY=${SESSION_KEY}\nNETWORK=calibration\nGRANT=${grant}\n`
-  )
-}
 
 function writeIndexEntry(home: Home, paths: string[], keyholder: Partial<typeof KEYHOLDER> = {}): void {
   const files = paths.map((path) => {

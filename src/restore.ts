@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { Synapse } from '@filoz/synapse-sdk'
-import { decrypt } from './envelope.ts'
 import { indexPath, type Keyholder, keyholderOf, readIndex, sameKeyholder } from './local-index.ts'
-import { type SessionFile, unpack } from './piece.ts'
-import { CHAINS, type Network, openLogin, SOURCE } from './session.ts'
+import { openPiece, type SessionFile } from './piece.ts'
+import { type Network, openLogin } from './session.ts'
+import type { Connect } from './storage.ts'
 
 export type RestoreOptions = { network: Network; claudeHome: string }
 
@@ -12,29 +11,27 @@ export type RestoreOptions = { network: Network; claudeHome: string }
  * Downloads a session's newest backup, checks it, and writes its files back into Claude Code's home folder.
  * Nothing is written unless the piece decrypts and every file matches its SHA-256 and passes `writeSessionFiles`' checks.
  */
-export async function restore(options: RestoreOptions, id: string, print: (line: string) => void): Promise<number> {
+export async function restore(
+  options: RestoreOptions,
+  id: string,
+  print: (line: string) => void,
+  connect: Connect
+): Promise<number> {
   const entry = readIndex(indexPath()).sessions[id]
   if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
-  const { grant } = await openLogin(options.network)
-  const keyholder = keyholderOf(options.network, grant)
+  const login = await openLogin(options.network)
+  const keyholder = keyholderOf(options.network, login.grant)
   if (!sameKeyholder(entry, keyholder)) {
     throw new Error(
       `Session ${id} is backed up under ${describe(entry)}, but this login is for ${describe(keyholder)}. ` +
         'It cannot decrypt that backup. Nothing was written.'
     )
   }
-  const synapse = Synapse.create({ account: grant.owner, chain: CHAINS[options.network], source: SOURCE })
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
-  const envelope = await synapse.storage.download({ pieceCid: entry.pieceCid })
-  let plaintext: Uint8Array
-  try {
-    plaintext = await decrypt(grant, envelope)
-  } catch (error) {
-    // FEE wraps the key resolver's own reason as the cause.
-    const reason = error instanceof Error && error.cause instanceof Error ? error.cause.message : String(error)
-    throw new Error(`The backup of ${id} does not decrypt: ${reason}. Nothing was written.`)
-  }
-  const { header, files } = unpack(plaintext)
+  const envelope = await connect(login, options.network, print).download(entry.pieceCid)
+  const { header, files } = await openPiece(login.grant, envelope).catch((error: unknown) => {
+    throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`)
+  })
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)
   }

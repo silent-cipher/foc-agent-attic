@@ -6,6 +6,7 @@ import type { Address, Hex } from 'viem'
 import type { OpenedGrant } from './grant.ts'
 import type { Header } from './piece.ts'
 import { type Network, writePrivateFile } from './session.ts'
+import type { Copy } from './storage.ts'
 
 /**
  * Who can read a piece: the network it is on and the owner's group key it is encrypted under.
@@ -27,8 +28,7 @@ export type IndexEntry = Header &
     pieceCid: string
     /** Bytes of the encrypted piece. */
     size: number
-    /** One per copy. Ids are decimal strings, since JSON has no bigint. */
-    copies: { providerId: string; dataSetId: string; pieceId: string }[]
+    copies: Copy[]
   }
 
 /** What `~/.attic/index.json` holds: the newest backup of each session, by session ID. */

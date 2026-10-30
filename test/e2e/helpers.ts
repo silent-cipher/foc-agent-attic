@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { makeGrant, SESSION_KEY } from '../make-grant.ts'
 
 const BUNDLE = fileURLToPath(new URL('../../plugins/attic/dist/attic.mjs', import.meta.url))
 
@@ -57,6 +58,16 @@ export async function runAtticLive(
   }
   const [status] = await once(child, 'close')
   return { status: typeof status === 'number' ? status : null, ...output }
+}
+
+/** Logs `home` in on calibration as the console leaves a login, written directly: opening it needs no network. */
+export async function logIn(home: Home): Promise<void> {
+  mkdirSync(join(home.root, '.attic'), { recursive: true })
+  const grant = await makeGrant()
+  writeFileSync(
+    join(home.root, '.attic', 'session.env'),
+    `SESSION_KEY=${SESSION_KEY}\nNETWORK=calibration\nGRANT=${grant}\n`
+  )
 }
 
 /** Writes a Claude Code session, one message and one subagent, and returns its paths under `home.claude`. */
