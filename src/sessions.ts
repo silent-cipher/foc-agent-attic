@@ -13,7 +13,7 @@ export async function sessions(
   print: (line: string) => void,
   now = Math.floor(Date.now() / 1000)
 ): Promise<number> {
-  const entries = indexEntries().toSorted((a, b) => (a.lastWriteAt < b.lastWriteAt ? 1 : -1))
+  const entries = indexEntries().toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
   if (entries.length === 0) {
     print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
     print('On a new machine, /attic:setup rebuilds the index from your backups.')

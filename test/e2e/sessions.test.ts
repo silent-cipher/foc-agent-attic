@@ -65,3 +65,12 @@ test('sessions shows a failed backup run and that Attic is not logged in', async
   )
   assert.match(result.stdout, /\n✗ Attic is not logged in\. Run \/attic:setup first\.\n$/)
 })
+
+test('a status file that is not a run status is refused, not shown', async () => {
+  const home = await tempHome()
+  mkdirSync(join(home.root, '.attic'), { recursive: true })
+  writeFileSync(join(home.root, '.attic', 'status.json'), '{"ok":"yes"}')
+  const result = runAttic(home, ['sessions'])
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /status\.json is not an Attic run status\. Fix it, or delete it\./)
+})
