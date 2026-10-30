@@ -21,7 +21,13 @@ export async function sessions(
     const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size']
     const rows = [
       header,
-      ...entries.map((e) => [e.sessionId, e.agent, e.project ?? '?', dateTime(e.lastWriteAt), kib(e.size)]),
+      ...entries.map((e) => [
+        e.sessionId,
+        e.agent,
+        e.project ?? '?',
+        dateTime(e.lastWriteAt),
+        `${(e.size / 1024).toFixed(1)} KiB`,
+      ]),
     ]
     const widths = header.map((_, column) => Math.max(...rows.map((row) => row[column]?.length ?? 0)))
     for (const row of rows)
@@ -59,5 +65,3 @@ export async function sessions(
 }
 
 const dateTime = (iso: string) => iso.slice(0, 16).replace('T', ' ')
-
-const kib = (bytes: number) => `${(bytes / 1024).toFixed(1)} KiB`
