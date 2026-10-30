@@ -16,14 +16,27 @@ export type IndexEntry = Header &
   }
 
 /** What `~/.attic/index.json` holds: the newest backup of each session, by session ID. */
-export type Index = { sessions: Record<string, IndexEntry> }
+type Index = { sessions: Record<string, IndexEntry> }
 
-export function indexPath(): string {
+/** The index's entry for a session, or undefined when it has no backup here. */
+export function indexEntry(sessionId: string): IndexEntry | undefined {
+  return readIndex(indexPath()).sessions[sessionId]
+}
+
+/** Records `entry` as its session's newest backup, keeping every other session's entry. */
+export function recordEntry(entry: IndexEntry): void {
+  const path = indexPath()
+  const index = readIndex(path)
+  index.sessions[entry.sessionId] = entry
+  writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+}
+
+function indexPath(): string {
   return join(homedir(), '.attic', 'index.json')
 }
 
 /** Reads the index, or an empty one when there is none. */
-export function readIndex(path: string): Index {
+function readIndex(path: string): Index {
   if (!existsSync(path)) return { sessions: {} }
   const index = JSON.parse(readFileSync(path, 'utf8'))
   if (typeof index?.sessions !== 'object' || index.sessions === null) {
@@ -35,8 +48,4 @@ export function readIndex(path: string): Index {
 /** Whether `entry` already backs up these exact files, readable by `keyholder`. */
 export function isUpToDate(entry: IndexEntry, keyholder: Keyholder, files: Header['files']): boolean {
   return sameKeyholder(entry, keyholder) && isDeepStrictEqual(entry.files, files)
-}
-
-export function writeIndex(index: Index, path: string): void {
-  writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
 }

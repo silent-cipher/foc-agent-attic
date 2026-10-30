@@ -39,10 +39,7 @@ test('backup of an unknown session uploads nothing and says it was not found', a
   writeClaudeSession(home, ID)
   const result = runAttic(home, ['backup', 'a0a0a0a0-0000-4000-8000-000000000000'])
   assert.equal(result.status, 1)
-  assert.match(
-    result.stderr,
-    /^Error: Session a0a0a0a0-0000-4000-8000-000000000000 was not found in .*\.claude\/projects/
-  )
+  assert.match(result.stderr, /^Error: Session a0a0a0a0-0000-4000-8000-000000000000 was not found in .*\.claude\./)
 })
 
 test('backup before setup says to run setup', async () => {

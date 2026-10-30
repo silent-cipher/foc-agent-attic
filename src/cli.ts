@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util'
 import { BaseError } from 'viem'
 import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
-import { claudeHome } from './claude-code.ts'
+import { claudeCode, claudeHome } from './claude-code.ts'
 import { restore } from './restore.ts'
 import { setup } from './setup.ts'
 import { synapseStorage } from './storage.ts'
@@ -44,7 +44,7 @@ function envOptions(env: NodeJS.ProcessEnv): BackupOptions {
   return {
     network: network ?? 'mainnet',
     consoleUrl: consoleUrl === undefined ? 'https://pay.filecoin.cloud' : consoleOrigin(consoleUrl),
-    claudeHome: claudeHome(env),
+    agents: [claudeCode(claudeHome(env))],
   }
 }
 

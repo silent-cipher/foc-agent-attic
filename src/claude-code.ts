@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
+import type { Agent, AgentSession } from './agent.ts'
 import type { SessionFile } from './piece.ts'
 
 /** Claude Code's home folder, which holds `projects/`. */
@@ -8,11 +9,14 @@ export function claudeHome(env: NodeJS.ProcessEnv): string {
   return env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 }
 
-export type ClaudeSession = {
-  /** Sorted by path, which is relative to the Claude Code home folder. */
-  files: SessionFile[]
-  project: string | null
-  lastWriteAt: Date
+/** Claude Code, keeping its sessions under `home`. */
+export function claudeCode(home: string): Agent {
+  return {
+    name: 'claude-code',
+    home,
+    readSession: (id) => readClaudeSession(home, id),
+    resumeCommand: (id) => `claude --resume ${id}`,
+  }
 }
 
 /**
@@ -21,7 +25,7 @@ export type ClaudeSession = {
  *
  * @returns undefined when no project holds the session.
  */
-export function readClaudeSession(home: string, id: string): ClaudeSession | undefined {
+function readClaudeSession(home: string, id: string): AgentSession | undefined {
   const projects = join(home, 'projects')
   if (!existsSync(projects)) return undefined
   const project = readdirSync(projects).find((name) => existsSync(join(projects, name, `${id}.jsonl`)))
