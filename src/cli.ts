@@ -4,6 +4,7 @@ import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
 import { claudeCode, claudeHome } from './claude-code.ts'
 import { restore } from './restore.ts'
+import { sessions } from './sessions.ts'
 import { setup } from './setup.ts'
 import { synapseStorage } from './storage.ts'
 
@@ -11,7 +12,7 @@ import { synapseStorage } from './storage.ts'
 export type Result = { code: number; stderr: string }
 
 const USAGE =
-  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic restore <session id>\n'
+  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic restore <session id> | attic sessions\n'
 
 /** Runs the Attic CLI with `args`, the arguments after the script path, writing its output to `write`. */
 export async function run(args: readonly string[], write: (text: string) => void): Promise<Result> {
@@ -20,14 +21,19 @@ export async function run(args: readonly string[], write: (text: string) => void
     return { code: 0, stderr: '' }
   }
   const [name, ...rest] = args
-  if (name !== 'setup' && name !== 'backup' && name !== 'restore') return { code: 1, stderr: USAGE }
+  if (name !== 'setup' && name !== 'backup' && name !== 'restore' && name !== 'sessions') {
+    return { code: 1, stderr: USAGE }
+  }
   const print = (line: string) => write(`${line}\n`)
   try {
     const options = envOptions(process.env)
-    const code =
-      name === 'setup'
-        ? await setup({ ...options, ...grantOption(rest) }, print, synapseStorage)
-        : await (name === 'backup' ? backup : restore)(options, sessionId(rest), print, synapseStorage)
+    let code: number
+    if (name === 'setup') code = await setup({ ...options, ...grantOption(rest) }, print, synapseStorage)
+    else if (name === 'sessions') {
+      // Refuses any argument.
+      parseArgs({ args: rest })
+      code = await sessions(options.network, print)
+    } else code = await (name === 'backup' ? backup : restore)(options, sessionId(rest), print, synapseStorage)
     return { code, stderr: '' }
   } catch (error) {
     return { code: 1, stderr: `Error: ${errorMessage(error)}\n` }

@@ -27,7 +27,7 @@ Try the plugin in Claude Code after `pnpm build`:
 claude --plugin-dir plugins/attic
 ```
 
-Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <session id>` and `/attic:restore <session id>`.
+Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <session id>`, `/attic:sessions` and `/attic:restore <session id>`.
 
 ## Logging in
 
@@ -41,4 +41,10 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 
 `/attic:restore <session id>` downloads the session's piece, decrypts it, and checks every file's SHA-256 before writing anything. It refuses paths outside Claude Code's folder and existing files that differ from the backup, writes the missing files, and prints `claude --resume <session id>`, which resumes the session from any folder.
 
-The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, so it needs `claude` on `PATH`.
+`/attic:sessions` lists the sessions in the index, newest first (ID, agent, project, last write, encrypted size), with the result of the last backup run, from `~/.attic/status.json`. It reads only local files, so it works offline. From 7 days before the Grant expires, it warns to run `/attic:setup` to renew it.
+
+## A new machine
+
+`/attic:setup` on a machine with no `~/.attic/index.json` rebuilds it from the chain: it lists the pieces in the owner's Attic data sets under the login's group key, decrypts only the start of each, where the header is, and keeps the newest piece of each session. This needs only the Grant, so sessions can be listed and restored before the new session key is authorized. A piece whose header can't be read is reported and left out, as restore could not read it either. Setup leaves an existing index alone; move it away to rebuild it.
+
+The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, then does the same on a new machine through an index rebuild, so it needs `claude` on `PATH`.
