@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from '
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { readClaudeSession } from '../../src/claude-code.ts'
+import { claudeCode } from '../../src/claude-code.ts'
 
 const ID = 'f6c998dd-bca7-4fcc-9e4c-d0fb49ced1b4'
 
@@ -24,7 +24,7 @@ function claudeHome(): string {
 
 test('reads the transcript and the files under its folder, paths relative to the home folder', () => {
   const home = claudeHome()
-  const session = readClaudeSession(home, ID)
+  const session = claudeCode(home).readSession(ID)
   assert.ok(session !== undefined)
   assert.deepEqual(
     session.files.map((file) => file.path),
@@ -38,7 +38,7 @@ test('reads the transcript and the files under its folder, paths relative to the
 })
 
 test('takes the project from the first cwd in the transcript', () => {
-  assert.equal(readClaudeSession(claudeHome(), ID)?.project, '/Users/me/work/app')
+  assert.equal(claudeCode(claudeHome()).readSession(ID)?.project, '/Users/me/work/app')
 })
 
 test('the last write is the newest file in the session', () => {
@@ -49,16 +49,16 @@ test('the last write is the newest file in the session', () => {
   utimesSync(join(project, `${ID}.jsonl`), older, older)
   utimesSync(join(project, ID, 'tool-results', 't1.txt'), older, older)
   utimesSync(join(project, ID, 'subagents', 'a1.jsonl'), newest, newest)
-  assert.deepEqual(readClaudeSession(home, ID)?.lastWriteAt, newest)
+  assert.deepEqual(claudeCode(home).readSession(ID)?.lastWriteAt, newest)
 })
 
 test('skips symlinks inside the session folder', () => {
   const home = claudeHome()
   symlinkSync('/etc/hosts', join(home, 'projects', '-Users-me-work-app', ID, 'link'))
-  assert.equal(readClaudeSession(home, ID)?.files.length, 3)
+  assert.equal(claudeCode(home).readSession(ID)?.files.length, 3)
 })
 
 test('an unknown session or a home without projects is not found', () => {
-  assert.equal(readClaudeSession(claudeHome(), 'a0a0a0a0-0000-4000-8000-000000000000'), undefined)
-  assert.equal(readClaudeSession(mkdtempSync(join(tmpdir(), 'attic-empty-')), ID), undefined)
+  assert.equal(claudeCode(claudeHome()).readSession('a0a0a0a0-0000-4000-8000-000000000000'), undefined)
+  assert.equal(claudeCode(mkdtempSync(join(tmpdir(), 'attic-empty-'))).readSession(ID), undefined)
 })

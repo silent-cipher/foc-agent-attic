@@ -1,14 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { indexPath, readIndex } from './local-index.ts'
+import type { Agent } from './agent.ts'
+import { indexEntry } from './local-index.ts'
 import { type Keyholder, type Network, openLogin, sameKeyholder } from './login.ts'
 import { openPiece, type SessionFile } from './piece.ts'
 import type { Connect } from './storage.ts'
 
-export type RestoreOptions = { network: Network; claudeHome: string }
+export type RestoreOptions = { network: Network; agents: readonly Agent[] }
 
 /**
- * Downloads a session's newest backup, checks it, and writes its files back into Claude Code's home folder.
+ * Downloads a session's newest backup, checks it, and writes its files back into its agent's home folder.
  * Nothing is written unless the piece decrypts and every file matches its SHA-256 and passes `writeSessionFiles`' checks.
  */
 export async function restore(
@@ -17,8 +18,10 @@ export async function restore(
   print: (line: string) => void,
   connect: Connect
 ): Promise<number> {
-  const entry = readIndex(indexPath()).sessions[id]
+  const entry = indexEntry(id)
   if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
+  const agent = options.agents.find((candidate) => candidate.name === entry.agent)
+  if (agent === undefined) throw new Error(`Session ${id} is a ${entry.agent} session; update Attic to restore it.`)
   const login = await openLogin(options.network)
   if (!sameKeyholder(entry, login.keyholder)) {
     throw new Error(
@@ -34,14 +37,14 @@ export async function restore(
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)
   }
-  const written = writeSessionFiles(options.claudeHome, files)
+  const written = writeSessionFiles(agent.home, files)
   print(
     written === 0
       ? `✓ Session ${id} is already here, identical to its backup.`
-      : `✓ Restored session ${id}: ${written} of ${files.length} files written to ${options.claudeHome}`
+      : `✓ Restored session ${id}: ${written} of ${files.length} files written to ${agent.home}`
   )
   print('Resume it from any folder with:')
-  print(`claude --resume ${id}`)
+  print(agent.resumeCommand(id))
   return 0
 }
 

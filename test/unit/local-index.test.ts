@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { type IndexEntry, isUpToDate } from '../../src/local-index.ts'
+import { type IndexEntry, indexEntry, isUpToDate, recordEntry } from '../../src/local-index.ts'
 import type { Keyholder } from '../../src/login.ts'
+import { tempHome } from '../e2e/helpers.ts'
 
 const KEYHOLDER: Keyholder = {
   network: 'mainnet',
@@ -21,6 +24,13 @@ const ENTRY: IndexEntry = {
   pieceCid: 'bafk',
   size: 100,
   copies: [],
+}
+
+// The index lives under HOME.
+async function home(): Promise<string> {
+  const { root } = await tempHome()
+  process.env.HOME = root
+  return root
 }
 
 test('the same files under the same login are already backed up', () => {
@@ -45,4 +55,22 @@ test('an entry written before entries recorded their keyholder is not', () => {
   const { owner: _, groupKey: __, ...old } = ENTRY
   // Read back from JSON, as readIndex does: nothing checks old entries' shape.
   assert.equal(isUpToDate(JSON.parse(JSON.stringify(old)), KEYHOLDER, FILES), false)
+})
+
+test('recording a session keeps every other session and replaces its own older entry', async () => {
+  await home()
+  assert.equal(indexEntry('s1'), undefined)
+  recordEntry(ENTRY)
+  recordEntry({ ...ENTRY, sessionId: 's2', pieceCid: 'bafk2' })
+  recordEntry({ ...ENTRY, pieceCid: 'bafk3' })
+  assert.equal(indexEntry('s1')?.pieceCid, 'bafk3')
+  assert.equal(indexEntry('s2')?.pieceCid, 'bafk2')
+})
+
+test('a file that is not an index is refused, not replaced', async () => {
+  const root = await home()
+  mkdirSync(join(root, '.attic'))
+  writeFileSync(join(root, '.attic', 'index.json'), '{"backups":[]}')
+  assert.throws(() => indexEntry('s1'), /index\.json is not an Attic index/)
+  assert.throws(() => recordEntry(ENTRY), /index\.json is not an Attic index/)
 })

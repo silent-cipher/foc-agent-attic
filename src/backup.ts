@@ -1,15 +1,15 @@
 import { hostname } from 'node:os'
-import { readClaudeSession } from './claude-code.ts'
+import type { Agent } from './agent.ts'
 import { checkFunding, fundingUrl } from './funding.ts'
-import { indexPath, isUpToDate, readIndex, writeIndex } from './local-index.ts'
+import { indexEntry, isUpToDate, recordEntry } from './local-index.ts'
 import { type Network, openLogin } from './login.ts'
 import { fileEntries, sealPiece } from './piece.ts'
 import type { Connect } from './storage.ts'
 
-export type BackupOptions = { network: Network; consoleUrl: string; claudeHome: string }
+export type BackupOptions = { network: Network; consoleUrl: string; agents: readonly Agent[] }
 
 /**
- * Backs up one Claude Code session now, active or not, unless the index already holds these exact files
+ * Backs up one session now, active or not, unless the index already holds these exact files
  * under this login's group key.
  * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
@@ -21,12 +21,16 @@ export async function backup(
   print: (line: string) => void,
   connect: Connect
 ): Promise<number> {
-  const session = readClaudeSession(options.claudeHome, id)
-  if (session === undefined) throw new Error(`Session ${id} was not found in ${options.claudeHome}/projects.`)
-  const path = indexPath()
-  const index = readIndex(path)
+  const found = options.agents.flatMap((agent) => {
+    const session = agent.readSession(id)
+    return session === undefined ? [] : [{ agent, session }]
+  })[0]
+  if (found === undefined) {
+    throw new Error(`Session ${id} was not found in ${options.agents.map((agent) => agent.home).join(' or ')}.`)
+  }
+  const { agent, session } = found
   const login = await openLogin(options.network)
-  const previous = index.sessions[id]
+  const previous = indexEntry(id)
   if (previous !== undefined && isUpToDate(previous, login.keyholder, fileEntries(session.files))) {
     print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
     return 0
@@ -44,7 +48,7 @@ export async function backup(
   const { header, envelope } = await sealPiece(
     login.grant,
     {
-      agent: 'claude-code',
+      agent: agent.name,
       sessionId: id,
       project: session.project,
       machine: hostname(),
@@ -61,8 +65,7 @@ export async function backup(
     return 2
   }
   const { pieceCid, copies } = await storage.store(envelope)
-  index.sessions[id] = { ...header, ...login.keyholder, pieceCid, size: envelope.length, copies }
-  writeIndex(index, path)
+  recordEntry({ ...header, ...login.keyholder, pieceCid, size: envelope.length, copies })
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
   print(`  Piece ${pieceCid} in data set ${copies.map((copy) => copy.dataSetId).join(', ')}`)
   return 0
