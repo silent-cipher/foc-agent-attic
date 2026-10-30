@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import type { Agent } from './agent.ts'
+import type { Agent, AgentSession } from './agent.ts'
 import { checkFunding, fundingUrl } from './funding.ts'
 import { indexEntry, isUpToDate, recordEntry } from './local-index.ts'
 import { type Network, openLogin } from './login.ts'
@@ -21,10 +21,14 @@ export async function backup(
   print: (line: string) => void,
   connect: Connect
 ): Promise<number> {
-  const found = options.agents.flatMap((agent) => {
+  let found: { agent: Agent; session: AgentSession } | undefined
+  for (const agent of options.agents) {
     const session = agent.readSession(id)
-    return session === undefined ? [] : [{ agent, session }]
-  })[0]
+    if (session !== undefined) {
+      found = { agent, session }
+      break
+    }
+  }
   if (found === undefined) {
     throw new Error(`Session ${id} was not found in ${options.agents.map((agent) => agent.home).join(' or ')}.`)
   }
