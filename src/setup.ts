@@ -1,14 +1,13 @@
 import { publicKeyOf } from '@filoz/keysmith'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
-import { AddPiecesPermission, CreateDataSetPermission, getExpirations } from '@filoz/synapse-core/session-key'
+import { getExpirations } from '@filoz/synapse-core/session-key'
 import { type Address, createPublicClient, formatUnits, http, parseUnits } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { decrypt, encrypt } from './envelope.ts'
 import { type OpenedGrant, openGrant } from './grant.ts'
+import { type Header, openPiece, sealPiece } from './piece.ts'
 import { CHAINS, type Network, readSession, type Session, sessionPath, writeSession } from './session.ts'
+import { PERMISSIONS } from './storage.ts'
 
-/** What every Attic session key is authorized for. */
-export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 // The spike's exact deposit left 0 USDFC available, and the next upload then failed.
 export const MIN_AVAILABLE_USDFC = 1
 const SUGGESTED_DEPOSIT_USDFC = 2
@@ -88,8 +87,15 @@ async function saveOrOpenGrant(
 ): Promise<OpenedGrant | undefined> {
   if (text !== undefined) {
     const grant = await openGrant(text, session.sessionKey, chainId)
-    // Saved only once its key has written and read back an envelope in the attic scope.
-    await decrypt(grant, await encrypt(grant, new TextEncoder().encode('attic')))
+    // Saved only once its key has sealed and opened a piece in the attic scope.
+    const probe: Omit<Header, 'v' | 'files'> = {
+      agent: 'claude-code',
+      sessionId: 'setup',
+      project: null,
+      machine: 'setup',
+      lastWriteAt: '1970-01-01T00:00:00.000Z',
+    }
+    await openPiece(grant, (await sealPiece(grant, probe, [])).envelope)
     writeSession({ ...session, grant: grant.text }, path)
     print(`✓ Grant saved for group key ${grant.grant.keyspace} of ${grant.owner}`)
     print('  It gives this session key permanent read access to everything under that group key.')
