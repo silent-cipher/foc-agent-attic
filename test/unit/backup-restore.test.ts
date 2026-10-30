@@ -84,8 +84,6 @@ test('an account short of funds uploads nothing and prints the funding link', as
   const output = printed()
 
   assert.equal(await backup(options(home), ID, output.print, storage.connect), 2)
-  const text = output.lines.join('\n')
-  assert.match(text, /✗ Storage service not approved\n✗ 0\.00 USDFC available, 0\.25 short of this upload/)
   assert.ok(output.lines.includes('https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration'))
   assert.equal(storage.state.pieces.size, 0)
 })

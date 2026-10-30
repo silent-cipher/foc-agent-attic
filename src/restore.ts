@@ -30,7 +30,7 @@ export async function restore(
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
   const envelope = await connect(login, options.network, print).download(entry.pieceCid)
   const { header, files } = await openPiece(login.grant, envelope).catch((error: unknown) => {
-    throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`)
+    throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`, { cause: error })
   })
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)

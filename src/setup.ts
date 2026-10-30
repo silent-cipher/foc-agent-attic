@@ -1,4 +1,3 @@
-import { hostname } from 'node:os'
 import { publicKeyOf } from '@filoz/keysmith'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
 import { getExpirations } from '@filoz/synapse-core/session-key'
@@ -94,8 +93,8 @@ async function saveOrOpenGrant(
       agent: 'claude-code',
       sessionId: 'setup',
       project: null,
-      machine: hostname(),
-      lastWriteAt: new Date().toISOString(),
+      machine: 'setup',
+      lastWriteAt: '1970-01-01T00:00:00.000Z',
     }
     await openPiece(grant, (await sealPiece(grant, probe, [])).envelope)
     writeSession({ ...session, grant: grant.text }, path)
