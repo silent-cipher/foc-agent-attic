@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseEnv } from 'node:util'
 import { isHex, parseUnits } from 'viem'
 import { type Readiness, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
-import { type Home, tempHome } from '../e2e/helpers.ts'
-import { makeGrant, SESSION_KEY, STRANGER_KEY } from '../make-grant.ts'
+import { type Home, logIn, tempHome } from '../e2e/helpers.ts'
+import { makeGrant, STRANGER_KEY } from '../make-grant.ts'
 import { memoryStorage } from '../memory-storage.ts'
 
 const NOW = 1_800_000_000
@@ -100,10 +100,7 @@ test('setup saves a pasted Grant and reports a ready account', async () => {
 
 test('a saved Grant that no longer opens says why and prints the approve link', async () => {
   const root = await home()
-  await runSetup()
-  const file = join(root.root, '.attic', 'session.env')
-  const text = readFileSync(file, 'utf8').replace(/SESSION_KEY=.*/, `SESSION_KEY=${SESSION_KEY}`)
-  writeFileSync(file, `${text}GRANT=${await makeGrant({ sessionKey: STRANGER_KEY })}\n`)
+  await logIn(root, await makeGrant({ sessionKey: STRANGER_KEY }))
 
   const result = await runSetup()
   assert.equal(result.code, 2)

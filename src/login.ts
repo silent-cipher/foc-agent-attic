@@ -23,7 +23,7 @@ export function sameKeyholder(a: Keyholder, b: Keyholder): boolean {
 }
 
 /** A session key whose Grant opened, on the network both are for. */
-export type Login = { sessionKey: Hex; network: Network; grant: OpenedGrant; keyholder: Keyholder }
+export type Login = { sessionKey: Hex; grant: OpenedGrant; keyholder: Keyholder }
 
 /** What `~/.attic/session.env` holds. The Grant is absent until the owner pastes one. */
 type SavedLogin = { sessionKey: Hex; network: Network; grant?: string }
@@ -93,7 +93,7 @@ export async function logIn(
 async function open(saved: SavedLogin, text: string): Promise<Login> {
   const grant = await openGrant(text, saved.sessionKey, CHAINS[saved.network].id)
   const keyholder = { network: saved.network, owner: grant.owner, groupKey: grant.grant.keyspace }
-  return { sessionKey: saved.sessionKey, network: saved.network, grant, keyholder }
+  return { sessionKey: saved.sessionKey, grant, keyholder }
 }
 
 function loginPath(): string {

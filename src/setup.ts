@@ -3,7 +3,7 @@ import type { Address, Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { checkFunding, fundingUrl } from './funding.ts'
 import { logIn, type Network } from './login.ts'
-import type { Connect } from './storage.ts'
+import type { Account, Connect } from './storage.ts'
 
 export type SetupOptions = { network: Network; consoleUrl: string; grant?: string }
 
@@ -16,7 +16,7 @@ export type SetupOptions = { network: Network; consoleUrl: string; grant?: strin
 export async function setup(options: SetupOptions, print: (line: string) => void, connect: Connect): Promise<number> {
   const { sessionKey, login } = await logIn(options.network, options.grant, print)
   const sessionAddress = privateKeyToAccount(sessionKey).address
-  const approveUrl = await authorizeUrl(options.consoleUrl, options.network, sessionKey, sessionAddress)
+  const approveUrl = await authorizeUrl(options.consoleUrl, options.network, sessionKey)
   if (login === undefined) {
     print('Approve this session key in the Filecoin Cloud console, then copy the Grant it shows:')
     print(approveUrl)
@@ -40,31 +40,24 @@ export async function setup(options: SetupOptions, print: (line: string) => void
   )
 }
 
-async function authorizeUrl(
-  consoleUrl: string,
-  network: Network,
-  sessionKey: Hex,
-  sessionAddress: Address
-): Promise<string> {
+async function authorizeUrl(consoleUrl: string, network: Network, sessionKey: Hex): Promise<string> {
+  const account = privateKeyToAccount(sessionKey)
   // With pubkey, the console also issues a Grant for the whole group key (node=keyspace), wrapped to it.
   const pubkey = publicKeyOf(sessionKey).toLowerCase()
-  const pubkeysig = await privateKeyToAccount(sessionKey).signMessage({
+  const pubkeysig = await account.signMessage({
     message: `Keysmith key agreement key: ${pubkey}`,
   })
   // Lowercase: the console's strict address check refuses a mixed-case address with a bad checksum.
-  return `${consoleUrl}/console/setup?authorize=${sessionAddress.toLowerCase()}&scopes=createDataSet,addPieces&network=${network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
+  return `${consoleUrl}/console/setup?authorize=${account.address.toLowerCase()}&scopes=createDataSet,addPieces&network=${network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
 }
 
 /** What the chain says about the owner's account and this session key. */
-export type Readiness = {
+export type Readiness = Account & {
   owner: Address
   /** Unix seconds; 0 when the owner never authorized the key. */
   authorizedUntil: number
   /** Unix seconds. */
   grantExpires: number
-  storageApproved: boolean
-  /** USDFC base units (18 decimals). */
-  availableFunds: bigint
   approveUrl: string
   fundingUrl: string
 }

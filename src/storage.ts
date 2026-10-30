@@ -5,7 +5,7 @@ import { Synapse } from '@filoz/synapse-sdk'
 import { CHAINS, type Login } from './login.ts'
 
 /** What every Attic session key is authorized for. */
-export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
 
 /** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
 const SOURCE = 'attic'
@@ -35,7 +35,7 @@ export type Connect = (login: Login, progress: (line: string) => void) => Storag
 
 export const synapseStorage: Connect = (login, progress) => {
   const owner = login.grant.owner
-  const chain = CHAINS[login.network]
+  const chain = CHAINS[login.keyholder.network]
   const sessionKey = fromSecp256k1({ privateKey: login.sessionKey, root: owner, chain })
   let synced: Promise<void> | undefined
   const sync = () => {

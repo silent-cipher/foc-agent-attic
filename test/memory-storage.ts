@@ -22,7 +22,7 @@ export function memoryStorage() {
   const state: MemoryState = { pieces: new Map(), authorizedUntil: 4102444800, quote: FUNDED }
   const connect: Connect = () => ({
     authorizedUntil: async () => state.authorizedUntil,
-    account: async () => ({ storageApproved: state.quote.storageApproved, availableFunds: state.quote.availableFunds }),
+    account: async () => state.quote,
     quote: async () => state.quote,
     async store(envelope) {
       if (state.storeError !== undefined) throw state.storeError
