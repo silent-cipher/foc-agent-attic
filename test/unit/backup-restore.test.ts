@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseUnits } from 'viem'
 import { type BackupOptions, backup } from '../../src/backup.ts'
+import { indexPath } from '../../src/local-index.ts'
 import { restore } from '../../src/restore.ts'
 import { type Home, logIn, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
 import { memoryStorage } from '../memory-storage.ts'
@@ -27,8 +28,6 @@ function printed(): { lines: string[]; print: (line: string) => void } {
   const lines: string[] = []
   return { lines, print: (line) => lines.push(line) }
 }
-
-const indexPath = (home: Home) => join(home.root, '.attic', 'index.json')
 
 test('a backed-up session, deleted locally, restores byte for byte', async () => {
   const home = await loggedInHome()
@@ -55,12 +54,12 @@ test('a failed upload leaves no index entry, so the next backup uploads it', asy
   storage.state.storeError = new Error('commit timed out')
 
   await assert.rejects(backup(options(home), ID, printed().print, storage.connect), /commit timed out/)
-  assert.equal(existsSync(indexPath(home)), false)
+  assert.equal(existsSync(indexPath()), false)
 
   storage.state.storeError = undefined
   assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
   assert.equal(storage.state.pieces.size, 1)
-  assert.ok(JSON.parse(readFileSync(indexPath(home), 'utf8')).sessions[ID])
+  assert.ok(JSON.parse(readFileSync(indexPath(), 'utf8')).sessions[ID])
 })
 
 test('an unauthorized session key uploads nothing and says to run setup', async () => {
@@ -73,7 +72,7 @@ test('an unauthorized session key uploads nothing and says to run setup', async 
   assert.equal(await backup(options(home), ID, output.print, storage.connect), 2)
   assert.match(output.lines.join('\n'), /✗ Session key not authorized .* Run \/attic:setup/)
   assert.equal(storage.state.pieces.size, 0)
-  assert.equal(existsSync(indexPath(home)), false)
+  assert.equal(existsSync(indexPath()), false)
 })
 
 test('an account short of funds uploads nothing and prints the funding link', async () => {
@@ -95,9 +94,9 @@ test("restore refuses a piece that holds another session's files and writes noth
   writeClaudeSession(home, OTHER)
   await backup(options(home), ID, printed().print, storage.connect)
   await backup(options(home), OTHER, printed().print, storage.connect)
-  const index = JSON.parse(readFileSync(indexPath(home), 'utf8'))
+  const index = JSON.parse(readFileSync(indexPath(), 'utf8'))
   index.sessions[ID].pieceCid = index.sessions[OTHER].pieceCid
-  writeFileSync(indexPath(home), JSON.stringify(index))
+  writeFileSync(indexPath(), JSON.stringify(index))
   rmSync(join(home.claude, 'projects'), { recursive: true })
 
   await assert.rejects(

@@ -88,8 +88,7 @@ async function saveOrOpenGrant(
   if (text !== undefined) {
     const grant = await openGrant(text, session.sessionKey, chainId)
     // Saved only once its key has sealed and opened a piece in the attic scope.
-    const probe: Omit<Header, 'files'> = {
-      v: 1,
+    const probe: Omit<Header, 'v' | 'files'> = {
       agent: 'claude-code',
       sessionId: 'setup',
       project: null,

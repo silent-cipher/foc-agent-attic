@@ -3,7 +3,7 @@ import { parseUnits } from 'viem'
 import type { Connect, Quote } from '../src/storage.ts'
 
 /** An account that can store anything: storage approved, nothing to deposit, 5 USDFC available. */
-export const FUNDED: Quote = { storageApproved: true, depositNeeded: 0n, availableFunds: parseUnits('5', 18) }
+const FUNDED: Quote = { storageApproved: true, depositNeeded: 0n, availableFunds: parseUnits('5', 18) }
 
 type MemoryState = {
   pieces: Map<string, Uint8Array>

@@ -7,8 +7,7 @@ import { openGrant, SCOPE } from '../../src/grant.ts'
 import { CONTENT_TYPE, type Header, openPiece, sealPiece } from '../../src/piece.ts'
 import { CALIBRATION, makeGrant, SESSION_KEY, STRANGER_KEY } from '../make-grant.ts'
 
-const FIELDS: Omit<Header, 'files'> = {
-  v: 1,
+const FIELDS: Omit<Header, 'v' | 'files'> = {
   agent: 'claude-code',
   sessionId: 'f6c998dd-bca7-4fcc-9e4c-d0fb49ced1b4',
   project: '/Users/me/work/app',
@@ -122,7 +121,7 @@ test('a header from a newer format asks for an Attic update', async () => {
 
 test('a header without the session fields is refused', async () => {
   await assert.rejects(
-    openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, sessionId: 7, files: [] }))),
+    openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, v: 1, sessionId: 7, files: [] }))),
     /not an Attic session header/
   )
 })

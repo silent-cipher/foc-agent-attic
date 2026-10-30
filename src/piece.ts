@@ -38,10 +38,10 @@ export function fileEntries(files: readonly SessionFile[]): FileEntry[] {
  */
 export async function sealPiece(
   grant: OpenedGrant,
-  fields: Omit<Header, 'files'>,
+  fields: Omit<Header, 'v' | 'files'>,
   files: readonly SessionFile[]
 ): Promise<{ header: Header; envelope: Uint8Array }> {
-  const header = { ...fields, files: fileEntries(files) }
+  const header: Header = { v: 1, ...fields, files: fileEntries(files) }
   const json = new TextEncoder().encode(JSON.stringify(header))
   const length = new Uint8Array(4)
   new DataView(length.buffer).setUint32(0, json.length)

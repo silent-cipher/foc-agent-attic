@@ -45,7 +45,6 @@ export async function backup(
   const { header, envelope } = await sealPiece(
     login.grant,
     {
-      v: 1,
       agent: 'claude-code',
       sessionId: id,
       project: session.project,
