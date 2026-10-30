@@ -1,22 +1,29 @@
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
-import { getAccountSummary } from '@filoz/synapse-core/pay'
+import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
 import { AddPiecesPermission, CreateDataSetPermission, fromSecp256k1 } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
-import { CHAINS, type Login, type Network, SOURCE } from './session.ts'
+import { CHAINS, type Login } from './login.ts'
 
 /** What every Attic session key is authorized for. */
-export const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+
+/** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
+const SOURCE = 'attic'
 
 /** One stored copy of a piece. Ids are decimal strings, since JSON has no bigint. */
 export type Copy = { providerId: string; dataSetId: string; pieceId: string }
 
-/** What the owner's account has, and lacks, to store more bytes. USDFC in base units (18 decimals). */
-export type Quote = { storageApproved: boolean; depositNeeded: bigint; availableFunds: bigint }
+/** The owner's account. USDFC in base units (18 decimals). */
+export type Account = { storageApproved: boolean; availableFunds: bigint }
+
+/** The owner's account, and the deposit it lacks to store more bytes. */
+export type Quote = Account & { depositNeeded: bigint }
 
 /** Attic's pieces on Filecoin, as one login reaches them. */
 export type Storage = {
-  /** Whether the owner authorized the session key to store pieces, and that has not expired. */
-  isAuthorized(): Promise<boolean>
+  /** Unix seconds until which the owner authorized the session key to store pieces; 0 when never. */
+  authorizedUntil(): Promise<number>
+  account(): Promise<Account>
   quote(size: number): Promise<Quote>
   /** Resolves once the envelope is committed on chain. */
   store(envelope: Uint8Array): Promise<{ pieceCid: string; copies: Copy[] }>
@@ -24,11 +31,11 @@ export type Storage = {
 }
 
 /** Reaches Attic's storage for `login`, reporting slow steps to `progress`. */
-export type Connect = (login: Login, network: Network, progress: (line: string) => void) => Storage
+export type Connect = (login: Login, progress: (line: string) => void) => Storage
 
-export const synapseStorage: Connect = (login, network, progress) => {
+export const synapseStorage: Connect = (login, progress) => {
   const owner = login.grant.owner
-  const chain = CHAINS[network]
+  const chain = CHAINS[login.keyholder.network]
   const sessionKey = fromSecp256k1({ privateKey: login.sessionKey, root: owner, chain })
   let synced: Promise<void> | undefined
   const sync = () => {
@@ -63,11 +70,25 @@ export const synapseStorage: Connect = (login, network, progress) => {
     uploads ??= openUploads()
     return uploads
   }
+  // Reads and downloads need no session key, so they work before the owner authorizes it.
+  let reader: Synapse | undefined
+  const getReader = () => {
+    reader ??= Synapse.create({ account: owner, chain, source: SOURCE })
+    return reader
+  }
 
   return {
-    async isAuthorized() {
+    async authorizedUntil() {
       await sync()
-      return sessionKey.hasPermissions(PERMISSIONS)
+      return Math.min(...PERMISSIONS.map((permission) => Number(sessionKey.expirations[permission])))
+    },
+    async account() {
+      const { client } = getReader()
+      const [storageApproved, account] = await Promise.all([
+        isFwssMaxApproved(client, { clientAddress: owner }),
+        getAccountSummary(client, { address: owner }),
+      ])
+      return { storageApproved, availableFunds: account.availableFunds }
     },
     async quote(size) {
       const { synapse, contexts } = await getUploads()
@@ -103,7 +124,7 @@ export const synapseStorage: Connect = (login, network, progress) => {
       }
     },
     download(pieceCid) {
-      return Synapse.create({ account: owner, chain, source: SOURCE }).storage.download({ pieceCid })
+      return getReader().storage.download({ pieceCid })
     },
   }
 }

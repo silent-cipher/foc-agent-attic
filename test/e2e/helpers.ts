@@ -61,12 +61,11 @@ export async function runAtticLive(
 }
 
 /** Logs `home` in on calibration as the console leaves a login, written directly: opening it needs no network. */
-export async function logIn(home: Home): Promise<void> {
+export async function logIn(home: Home, grant?: string): Promise<void> {
   mkdirSync(join(home.root, '.attic'), { recursive: true })
-  const grant = await makeGrant()
   writeFileSync(
     join(home.root, '.attic', 'session.env'),
-    `SESSION_KEY=${SESSION_KEY}\nNETWORK=calibration\nGRANT=${grant}\n`
+    `SESSION_KEY=${SESSION_KEY}\nNETWORK=calibration\nGRANT=${grant ?? (await makeGrant())}\n`
   )
 }
 

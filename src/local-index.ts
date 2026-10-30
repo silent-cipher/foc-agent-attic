@@ -2,25 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import type { Address, Hex } from 'viem'
-import type { OpenedGrant } from './grant.ts'
+import { type Keyholder, sameKeyholder, writePrivateFile } from './login.ts'
 import type { Header } from './piece.ts'
-import { type Network, writePrivateFile } from './session.ts'
 import type { Copy } from './storage.ts'
-
-/**
- * Who can read a piece: the network it is on and the owner's group key it is encrypted under.
- * A login with another Grant, or a calibration test backup, cannot restore it.
- */
-export type Keyholder = { network: Network; owner: Address; groupKey: Hex }
-
-export function keyholderOf(network: Network, grant: OpenedGrant): Keyholder {
-  return { network, owner: grant.owner, groupKey: grant.grant.keyspace }
-}
-
-export function sameKeyholder(a: Keyholder, b: Keyholder): boolean {
-  return a.network === b.network && a.owner === b.owner && a.groupKey === b.groupKey
-}
 
 /** One backed-up session: its piece header and where the piece is stored. */
 export type IndexEntry = Header &

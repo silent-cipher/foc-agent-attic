@@ -26,7 +26,7 @@ export async function run(args: readonly string[], write: (text: string) => void
     const options = envOptions(process.env)
     const code =
       name === 'setup'
-        ? await setup({ ...options, ...grantOption(rest) }, print)
+        ? await setup({ ...options, ...grantOption(rest) }, print, synapseStorage)
         : await (name === 'backup' ? backup : restore)(options, sessionId(rest), print, synapseStorage)
     return { code, stderr: '' }
   } catch (error) {

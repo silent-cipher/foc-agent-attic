@@ -66,7 +66,7 @@ test('an unauthorized session key uploads nothing and says to run setup', async 
   const home = await loggedInHome()
   const storage = memoryStorage()
   writeClaudeSession(home, ID)
-  storage.state.authorized = false
+  storage.state.authorizedUntil = 0
   const output = printed()
 
   assert.equal(await backup(options(home), ID, output.print, storage.connect), 2)
