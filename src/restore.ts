@@ -37,6 +37,9 @@ export async function restore(
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)
   }
+  if (header.agent !== agent.name) {
+    throw new Error(`The piece for ${id} holds a ${header.agent} session, not ${agent.name}. Nothing was written.`)
+  }
   const written = writeSessionFiles(agent.home, files)
   print(
     written === 0

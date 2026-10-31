@@ -1,5 +1,5 @@
 ---
-description: Back up one Claude Code session now, encrypted, to Filecoin Onchain Cloud
+description: Back up one Claude Code or Codex session now, encrypted, to Filecoin Onchain Cloud
 argument-hint: "<session id>"
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" backup:*)
 ---

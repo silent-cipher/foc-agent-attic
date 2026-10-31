@@ -9,7 +9,7 @@ export const CONTENT_TYPE = 'application/vnd.filecoin.attic-session.v1'
 /** The plaintext header every session piece starts with. Paths are relative to the agent's home folder. */
 export type Header = {
   v: 1
-  agent: 'claude-code'
+  agent: 'claude-code' | 'codex'
   sessionId: string
   /** The folder the session ran in, or null when its files never say. */
   project: string | null
@@ -156,7 +156,7 @@ function isHeader(h: unknown): h is Header {
     'v' in h &&
     h.v === 1 &&
     'agent' in h &&
-    h.agent === 'claude-code' &&
+    (h.agent === 'claude-code' || h.agent === 'codex') &&
     'sessionId' in h &&
     typeof h.sessionId === 'string' &&
     'project' in h &&

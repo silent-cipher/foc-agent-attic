@@ -5,9 +5,12 @@ import { test } from 'node:test'
 import { parseUnits } from 'viem'
 import { type BackupOptions, backup } from '../../src/backup.ts'
 import { claudeCode } from '../../src/claude-code.ts'
+import { codex } from '../../src/codex.ts'
 import { indexEntry, recordEntry } from '../../src/local-index.ts'
 import { restore } from '../../src/restore.ts'
-import { type Home, logIn, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
+import { sessions } from '../../src/sessions.ts'
+import { setup } from '../../src/setup.ts'
+import { type Home, logIn, tempHome, writeClaudeSession, writeCodexSession } from '../e2e/helpers.ts'
 import { memoryStorage } from '../memory-storage.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
@@ -22,7 +25,11 @@ async function loggedInHome(): Promise<Home> {
 }
 
 function options(home: Home): BackupOptions {
-  return { network: 'calibration', consoleUrl: 'https://pay.filecoin.cloud', agents: [claudeCode(home.claude)] }
+  return {
+    network: 'calibration',
+    consoleUrl: 'https://pay.filecoin.cloud',
+    agents: [claudeCode(home.claude), codex(home.codex)],
+  }
 }
 
 function printed(): { lines: string[]; print: (line: string) => void } {
@@ -121,4 +128,43 @@ test('restore refuses a damaged piece and writes nothing', async () => {
     /^Error: The backup does not decrypt: .*Nothing was written\.$/s
   )
   assert.equal(existsSync(join(home.claude, 'projects')), false)
+})
+
+test('Codex backup restores on a new machine after index rebuild, and lists alongside Claude Code', async () => {
+  const home = await loggedInHome()
+  const storage = memoryStorage()
+  const [path] = writeCodexSession(home, ID)
+  assert.ok(path)
+  const original = readFileSync(join(home.codex, path))
+  writeClaudeSession(home, OTHER)
+  await backup(options(home), OTHER, printed().print, storage.connect)
+  await backup(options(home), ID, printed().print, storage.connect)
+  await backup(options(home), ID, printed().print, storage.connect)
+  assert.equal(storage.state.pieces.size, 2)
+  assert.equal(indexEntry(ID)?.agent, 'codex')
+
+  const fresh = await loggedInHome()
+  assert.equal(await setup(options(fresh), printed().print, storage.connect), 0)
+  const listing = printed()
+  await sessions('calibration', listing.print)
+  assert.match(listing.lines.join('\n'), new RegExp(`${ID} +codex +/tmp/attic-e2e`))
+  assert.match(listing.lines.join('\n'), new RegExp(`${OTHER} +claude-code`))
+  const output = printed()
+  assert.equal(await restore(options(fresh), ID, output.print, storage.connect), 0)
+  assert.deepEqual(readFileSync(join(fresh.codex, path)), original)
+  assert.equal(existsSync(fresh.claude), false)
+  assert.ok(output.lines.includes(`codex resume ${ID}`))
+  assert.equal(await restore(options(fresh), ID, output.print, storage.connect), 0)
+})
+
+test('restore refuses a Codex piece indexed as Claude Code and writes nothing', async () => {
+  const home = await loggedInHome()
+  const storage = memoryStorage()
+  writeCodexSession(home, ID)
+  await backup(options(home), ID, printed().print, storage.connect)
+  const entry = indexEntry(ID)
+  assert.ok(entry)
+  recordEntry({ ...entry, agent: 'claude-code' })
+  await assert.rejects(restore(options(home), ID, printed().print, storage.connect), /holds a codex session/)
+  assert.equal(existsSync(home.claude), false)
 })
