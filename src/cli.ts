@@ -3,6 +3,7 @@ import { BaseError } from 'viem'
 import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
 import { claudeCode, claudeHome } from './claude-code.ts'
+import { codex, codexHome } from './codex.ts'
 import { restore } from './restore.ts'
 import { sessions } from './sessions.ts'
 import { setup } from './setup.ts'
@@ -50,7 +51,7 @@ function envOptions(env: NodeJS.ProcessEnv): BackupOptions {
   return {
     network: network ?? 'mainnet',
     consoleUrl: consoleUrl === undefined ? 'https://pay.filecoin.cloud' : consoleOrigin(consoleUrl),
-    agents: [claudeCode(claudeHome(env))],
+    agents: [claudeCode(claudeHome(env)), codex(codexHome(env))],
   }
 }
 
@@ -59,7 +60,7 @@ function grantOption(args: string[]): { grant?: string } {
   return grant === undefined ? {} : { grant }
 }
 
-// The ID becomes a file name, so nothing that could leave the projects folder gets through.
+// The ID becomes a file name, so nothing that could leave the agent's folder gets through.
 function sessionId(args: string[]): string {
   const { positionals } = parseArgs({ args, allowPositionals: true })
   const [id] = positionals

@@ -95,3 +95,27 @@ export function writeClaudeSession(home: Home, id: string): string[] {
   }
   return Object.keys(files)
 }
+
+/** Writes a Codex rollout and returns its path under `home.codex`. */
+export function writeCodexSession(home: Home, id: string): string[] {
+  const path = join('sessions', '2026', '10', '28', `rollout-2026-10-28T09-12-00-${id}.jsonl`)
+  const meta = {
+    timestamp: '2026-10-28T09:12:00Z',
+    type: 'session_meta',
+    payload: {
+      id,
+      cwd: '/tmp/attic-e2e',
+      timestamp: '2026-10-28T09:12:00Z',
+      originator: 'codex_cli_rs',
+      cli_version: '0.165.0',
+      source: 'cli',
+      model_provider: 'openai',
+    },
+  }
+  mkdirSync(dirname(join(home.codex, path)), { recursive: true })
+  writeFileSync(
+    join(home.codex, path),
+    `${JSON.stringify(meta)}\n{"timestamp":"2026-10-28T09:12:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}\n`
+  )
+  return [path]
+}

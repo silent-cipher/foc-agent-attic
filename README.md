@@ -39,7 +39,7 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 
 `/attic:backup <session id>` backs up one Claude Code session now, even if it is still active: its transcript and its folder of subagents and tool results, under `~/.claude` (or `CLAUDE_CONFIG_DIR`). It checks the session key is authorized and USDFC is available, then packs a header (session ID, project, machine, each file's size and SHA-256) and the files into one piece, encrypts it under a fresh piece key, and stores it with one provider in an Attic data set. Only once the piece is committed does it record the piece in `~/.attic/index.json`, so a failed upload leaves nothing to clean up: run it again. Each index entry records the network, wallet and group key its piece is encrypted under. A session the index already holds unchanged, for the current login, is not uploaded again; after logging in with another wallet or group key, the next backup uploads it again, and restore refuses a backup the current login can't decrypt.
 
-`/attic:restore <session id>` downloads the session's piece, decrypts it, and checks every file's SHA-256 before writing anything. It refuses paths outside Claude Code's folder and existing files that differ from the backup, writes the missing files, and prints `claude --resume <session id>`, which resumes the session from any folder.
+`/attic:restore <session id>` downloads the session's piece, decrypts it, and checks every file's SHA-256 before writing anything. It refuses paths outside the session agent's folder and existing files that differ from the backup, writes the missing files, and prints `claude --resume <session id>`, which resumes the session from any folder.
 
 `/attic:sessions` lists the sessions in the index, newest first (ID, agent, project, last write, encrypted size), with the result of the last backup run, from `~/.attic/status.json`. It reads only local files, so it works offline. From 7 days before the Grant expires, it warns to run `/attic:setup` to renew it.
 
@@ -48,3 +48,17 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 `/attic:setup` on a machine with no `~/.attic/index.json` rebuilds it from the chain: it lists the pieces in the owner's Attic data sets under the login's group key, decrypts only the start of each, where the header is, and keeps the newest piece of each session. This needs only the Grant, so sessions can be listed and restored before the new session key is authorized. A piece whose header can't be read is reported and left out, as restore could not read it either. Setup leaves an existing index alone; move it away to rebuild it.
 
 The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, then does the same on a new machine through an index rebuild, so it needs `claude` on `PATH`.
+
+## Codex sessions and plugin
+
+The same backup, sessions and restore operations also handle Codex rollouts under `~/.codex/sessions` (or `$CODEX_HOME/sessions`). Attic saves the rollout JSONL byte for byte, including an active rollout's incomplete last line, and restores it to the same relative path under the destination Codex home. It reads the project from the initial `session_meta.payload.cwd` and prints `codex resume <id>` after restore. Global history, credentials, config, SQLite databases and archived sessions are not included; each subagent rollout is its own session ID.
+
+Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic restore <session id>` or `$attic version`. The CLI's `/attic:…` hints refer to the equivalent Claude Code commands.
+
+For local development, run `pnpm install` and `pnpm build` first. Add the checkout as a local marketplace:
+
+```sh
+codex plugin marketplace add /absolute/path/to/foc-agent-attic
+```
+
+Install Agent Attic from that marketplace in Codex's plugin browser (`/plugins`), then start a new session. The `.agents/plugins/marketplace.json` catalog points to the same `plugins/attic` folder Claude Code uses. Build before installing: the bundle is generated, not committed. After changing the plugin, rebuild and refresh/reinstall the cached copy.

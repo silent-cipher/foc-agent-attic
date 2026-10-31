@@ -5,20 +5,25 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { privateKeyToAccount } from 'viem/accounts'
 import { GROUP_KEY, OWNER_KEY } from '../make-grant.ts'
-import { type Home, logIn, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
+import { type Home, logIn, runAttic, tempHome, writeClaudeSession, writeCodexSession } from './helpers.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
 const CALIBRATION = { ATTIC_NETWORK: 'calibration' }
 const KEYHOLDER = { network: 'calibration', owner: privateKeyToAccount(OWNER_KEY).address, groupKey: GROUP_KEY }
 
-function writeIndexEntry(home: Home, paths: string[], keyholder: Partial<typeof KEYHOLDER> = {}): void {
+function writeIndexEntry(
+  home: Home,
+  paths: string[],
+  keyholder: Partial<typeof KEYHOLDER> = {},
+  agent: 'claude-code' | 'codex' = 'claude-code'
+): void {
   const files = paths.map((path) => {
-    const bytes = readFileSync(join(home.claude, path))
+    const bytes = readFileSync(join(agent === 'codex' ? home.codex : home.claude, path))
     return { path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
   })
   const entry = {
     v: 1,
-    agent: 'claude-code',
+    agent,
     sessionId: ID,
     project: '/tmp/attic-e2e',
     machine: 'e2e',
@@ -39,7 +44,10 @@ test('backup of an unknown session uploads nothing and says it was not found', a
   writeClaudeSession(home, ID)
   const result = runAttic(home, ['backup', 'a0a0a0a0-0000-4000-8000-000000000000'])
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /^Error: Session a0a0a0a0-0000-4000-8000-000000000000 was not found in .*\.claude\./)
+  assert.match(
+    result.stderr,
+    /^Error: Session a0a0a0a0-0000-4000-8000-000000000000 was not found in .*\.claude or .*\.codex\./
+  )
 })
 
 test('backup before setup says to run setup', async () => {
@@ -90,4 +98,22 @@ test('restore before setup says to run setup', async () => {
   const result = runAttic(home, ['restore', ID])
   assert.equal(result.status, 1)
   assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
+})
+
+test('the CLI finds Codex rollouts under CODEX_HOME, skips unchanged backups and lists them offline', async () => {
+  const home = await tempHome()
+  home.codex = join(home.root, 'custom-codex')
+  const paths = writeCodexSession(home, ID)
+  const before = runAttic(home, ['backup', ID])
+  assert.match(before.stderr, /Attic is not logged in/)
+  await logIn(home)
+  writeIndexEntry(home, paths, {}, 'codex')
+  const backedUp = runAttic(home, ['backup', ID], CALIBRATION)
+  assert.equal(backedUp.status, 0, backedUp.stderr)
+  assert.match(backedUp.stdout, /already backed up, unchanged/)
+  const listed = runAttic(home, ['sessions'], CALIBRATION)
+  assert.equal(listed.status, 0, listed.stderr)
+  assert.match(listed.stdout, new RegExp(`${ID} +codex +/tmp/attic-e2e`))
+  const restore = runAttic(home, ['restore', ID])
+  assert.match(restore.stderr, /saved session key is for calibration/)
 })

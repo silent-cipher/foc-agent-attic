@@ -1,0 +1,20 @@
+{
+  "name": "attic",
+  "interface": {
+    "displayName": "Agent Attic"
+  },
+  "plugins": [
+    {
+      "name": "attic",
+      "source": {
+        "source": "local",
+        "path": "./plugins/attic"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
