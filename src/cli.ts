@@ -13,7 +13,7 @@ import { synapseStorage } from './storage.ts'
 export type Result = { code: number; stderr: string }
 
 const USAGE =
-  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic restore <session id> | attic sessions\n'
+  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic backup --current | attic restore <session id> | attic sessions\n'
 
 /** Runs the Attic CLI with `args`, the arguments after the script path, writing its output to `write`. */
 export async function run(args: readonly string[], write: (text: string) => void): Promise<Result> {
@@ -34,7 +34,25 @@ export async function run(args: readonly string[], write: (text: string) => void
       // Refuses any argument.
       parseArgs({ args: rest })
       code = await sessions(options.network, print)
-    } else code = await (name === 'backup' ? backup : restore)(options, sessionId(rest), print, synapseStorage)
+    } else if (name === 'backup') {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: { current: { type: 'boolean' } },
+      })
+      let { agents } = options
+      if (values.current) {
+        if (positionals.length !== 0) throw new Error('Use --current or a session ID, not both.')
+        const claude = process.env.CLAUDE_SESSION_ID
+        const codex = process.env.CODEX_THREAD_ID
+        if (claude && codex) throw new Error('Both agents supply a current session ID. Give an explicit session ID.')
+        const id = claude || codex
+        if (!id) throw new Error('No current session ID. Run this from an agent, or give an explicit session ID.')
+        positionals.push(id)
+        agents = agents.filter((agent) => agent.name === (claude ? 'claude-code' : 'codex'))
+      }
+      code = await backup({ ...options, agents }, sessionId(positionals), print, synapseStorage)
+    } else code = await restore(options, sessionId(rest), print, synapseStorage)
     return { code, stderr: '' }
   } catch (error) {
     return { code: 1, stderr: `Error: ${errorMessage(error)}\n` }

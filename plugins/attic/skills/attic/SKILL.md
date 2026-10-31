@@ -10,10 +10,11 @@ Use the operation the user requested:
 - Version: `node "<plugin root>/dist/attic.mjs" --version`
 - Setup: `node "<plugin root>/dist/attic.mjs" setup`, adding `--grant <Grant>` only when the user supplies a Grant.
 - Backup: `node "<plugin root>/dist/attic.mjs" backup <session id>` with a 10-minute timeout.
+- Back up this chat: `node "<plugin root>/dist/attic.mjs" backup --current` in Codex, using its inherited `CODEX_THREAD_ID`. In Claude Code, use `node "<plugin root>/dist/attic.mjs" backup "${CLAUDE_SESSION_ID}"`, which Claude Code substitutes with the invoking session's ID. If the substitution is empty or still literal, report that the current session ID is unavailable; never guess from file timestamps.
 - List backups: `node "<plugin root>/dist/attic.mjs" sessions`
 - Restore: `node "<plugin root>/dist/attic.mjs" restore <session id>` with a 5-minute timeout.
 
-Ask for a session ID if backup or restore was requested without one. The CLI searches Claude Code's home and Codex's `CODEX_HOME` (default `~/.codex`); it selects the restore destination from the backup's agent. It needs no agent flag.
+Ask for a session ID if restore was requested without one, or for a session ID or `--current` if backup was requested without either. Reject `--current` combined with a session ID; restore does not accept `--current`. The CLI searches Claude Code's home and Codex's `CODEX_HOME` (default `~/.codex`); it selects the restore destination from the backup's agent. It needs no agent flag.
 
 Show progress and errors as printed. Exit 0 means success, including an unchanged backup or identical existing restore. Exit 2 means the owner has a console action to complete: show the checklist and links exactly as printed, then wait for the user. Exit 1 means failure; show the error. After a timeout, show the last progress and any transaction hash; don't claim success.
 
