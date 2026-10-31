@@ -17,11 +17,19 @@ export function codex(home: string): Agent {
     readSession: (id) => {
       const sessions = join(home, 'sessions')
       if (!existsSync(sessions)) return undefined
-      const entry = readdirSync(sessions, { recursive: true, withFileTypes: true }).find(
-        (entry) => entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith(`-${id}.jsonl`)
-      )
-      if (entry === undefined) return undefined
-      const path = join(entry.parentPath, entry.name)
+      const folders = [sessions]
+      let path: string | undefined
+      for (const folder of folders) {
+        for (const entry of readdirSync(folder, { withFileTypes: true })) {
+          if (entry.isDirectory()) folders.push(join(folder, entry.name))
+          else if (entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith(`-${id}.jsonl`)) {
+            path = join(folder, entry.name)
+            break
+          }
+        }
+        if (path !== undefined) break
+      }
+      if (path === undefined) return undefined
       const bytes = readFileSync(path)
       let meta: unknown
       try {

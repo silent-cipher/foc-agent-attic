@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { codex, codexHome } from '../../src/codex.ts'
 import { tempHome, writeCodexSession } from '../e2e/helpers.ts'
@@ -31,7 +31,7 @@ test('reads only the requested rollout, byte for byte, with its project and last
   assert.equal(agent.resumeCommand(ID), `codex resume ${ID}`)
 })
 
-test('ignores symlinks, unrelated files and partial IDs; missing sessions return undefined', async () => {
+test('ignores symlink files and directories; missing sessions return undefined', async () => {
   const home = await tempHome()
   assert.equal(codex(home.codex).readSession(ID), undefined)
   const [path] = writeCodexSession(home, ID)
@@ -40,9 +40,10 @@ test('ignores symlinks, unrelated files and partial IDs; missing sessions return
   renameSync(target, `${target}.saved`)
   symlinkSync(`${target}.saved`, target)
   assert.equal(codex(home.codex).readSession(ID), undefined)
-  mkdirSync(join(home.codex, 'sessions', 'linked'), { recursive: true })
-  symlinkSync(dirname(target), join(home.codex, 'sessions', 'linked', 'dir'))
-  assert.equal(codex(home.codex).readSession('missing'), undefined)
+  const outside = await tempHome()
+  writeCodexSession(outside, ID)
+  symlinkSync(join(outside.codex, 'sessions'), join(home.codex, 'sessions', 'linked'))
+  assert.equal(codex(home.codex).readSession(ID), undefined)
 })
 
 test('a missing project is null and malformed or mismatched metadata is refused', async () => {
