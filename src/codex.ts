@@ -31,9 +31,10 @@ export function codex(home: string): Agent {
       }
       if (path === undefined) return undefined
       const bytes = readFileSync(path)
+      const firstLineEnd = bytes.indexOf(0x0a)
       let meta: unknown
       try {
-        meta = JSON.parse(bytes.toString('utf8').split('\n', 1)[0] ?? '')
+        meta = JSON.parse(bytes.subarray(0, firstLineEnd < 0 ? bytes.length : firstLineEnd).toString('utf8'))
       } catch {
         throw new Error(`Codex rollout ${path} has invalid session metadata.`)
       }

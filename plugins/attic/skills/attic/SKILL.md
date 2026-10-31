@@ -17,7 +17,7 @@ Ask for a session ID if backup or restore was requested without one. The CLI sea
 
 Show progress and errors as printed. Exit 0 means success, including an unchanged backup or identical existing restore. Exit 2 means the owner has a console action to complete: show the checklist and links exactly as printed, then wait for the user. Exit 1 means failure; show the error. After a timeout, show the last progress and any transaction hash; don't claim success.
 
-For setup, ask the user to open the printed console link, approve the session key with their wallet, and paste the Grant (`fgr1_…`). Then rerun setup with that Grant. The session key stays the same on renewal. If setup rebuilds the index, show its session count and any skipped pieces. Suggest listing sessions afterward.
+When setup requests authorization or the user wants to renew, ask them to open the printed console link, approve the session key with their wallet, and paste the Grant (`fgr1_…`). Then rerun setup with that Grant. The session key stays the same on renewal. If setup rebuilds the index, show its session count and any skipped pieces. Suggest listing sessions afterward.
 
 After restore, show the resume command exactly as printed (`codex resume <id>` or `claude --resume <id>`). If a local file differs, never move or delete it yourself; explain the CLI's error and let the user decide. A newer local session can be backed up instead.
 
