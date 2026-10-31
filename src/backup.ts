@@ -1,6 +1,7 @@
 import { hostname } from 'node:os'
 import type { Agent, AgentSession } from './agent.ts'
 import { checkFunding, fundingUrl } from './funding.ts'
+import { recordRun } from './last-run.ts'
 import { indexEntry, isUpToDate, recordEntry } from './local-index.ts'
 import { type Network, openLogin } from './login.ts'
 import { fileEntries, sealPiece } from './piece.ts'
@@ -10,12 +11,35 @@ export type BackupOptions = { network: Network; consoleUrl: string; agents: read
 
 /**
  * Backs up one session now, active or not, unless the index already holds these exact files
- * under this login's group key.
+ * under this login's group key, and records how the run ended for `/attic:sessions`.
  * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
  * @returns 0 when backed up, 2 when the owner has something to do in the console.
  */
 export async function backup(
+  options: BackupOptions,
+  id: string,
+  print: (line: string) => void,
+  connect: Connect
+): Promise<number> {
+  const lines: string[] = []
+  const tee = (line: string) => {
+    if (/^[✓✗]/.test(line)) lines.push(line)
+    print(line)
+  }
+  try {
+    const code = await backupSession(options, id, tee, connect)
+    recordRun({ finishedAt: new Date().toISOString(), ok: code === 0, lines })
+    return code
+  } catch (error) {
+    // The first line: viem adds request details on the lines after it.
+    const [reason] = (error instanceof Error ? error.message : String(error)).split('\n')
+    recordRun({ finishedAt: new Date().toISOString(), ok: false, lines: [...lines, `✗ ${reason}`] })
+    throw error
+  }
+}
+
+async function backupSession(
   options: BackupOptions,
   id: string,
   print: (line: string) => void,

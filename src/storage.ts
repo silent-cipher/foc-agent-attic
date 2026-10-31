@@ -1,6 +1,9 @@
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
+import { paginate } from '@filoz/synapse-core'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
+import { getPieces } from '@filoz/synapse-core/pdp-verifier'
 import { AddPiecesPermission, CreateDataSetPermission, fromSecp256k1 } from '@filoz/synapse-core/session-key'
+import { getPdpDataSets } from '@filoz/synapse-core/warm-storage'
 import { Synapse } from '@filoz/synapse-sdk'
 import { CHAINS, type Login } from './login.ts'
 
@@ -19,6 +22,16 @@ export type Account = { storageApproved: boolean; availableFunds: bigint }
 /** The owner's account, and the deposit it lacks to store more bytes. */
 export type Quote = Account & { depositNeeded: bigint }
 
+/** A piece in Attic's data sets, readable by byte range without downloading all of it. */
+export type StoredPiece = {
+  pieceCid: string
+  /** Bytes of the encrypted piece. */
+  size: number
+  copies: Copy[]
+  /** The `length` bytes from `offset`. */
+  read(offset: number, length: number): Promise<Uint8Array>
+}
+
 /** Attic's pieces on Filecoin, as one login reaches them. */
 export type Storage = {
   /** Unix seconds until which the owner authorized the session key to store pieces; 0 when never. */
@@ -28,6 +41,8 @@ export type Storage = {
   /** Resolves once the envelope is committed on chain. */
   store(envelope: Uint8Array): Promise<{ pieceCid: string; copies: Copy[] }>
   download(pieceCid: string): Promise<Uint8Array>
+  /** Every piece in the owner's Attic data sets under this login's group key. */
+  pieces(): Promise<StoredPiece[]>
 }
 
 /** Reaches Attic's storage for `login`, reporting slow steps to `progress`. */
@@ -126,5 +141,47 @@ export const synapseStorage: Connect = (login, progress) => {
     download(pieceCid) {
       return getReader().storage.download({ pieceCid })
     },
+    async pieces() {
+      const { client } = getReader()
+      const groupKey = login.keyholder.groupKey.toLowerCase()
+      const found = new Map<string, StoredPiece>()
+      for await (const dataSet of paginate(({ cursor }) => getPdpDataSets(client, { address: owner, cursor }))) {
+        const { metadata } = dataSet
+        if (!dataSet.live || metadata.source !== SOURCE || metadata[KEYSPACE_ID_KEY]?.toLowerCase() !== groupKey)
+          continue
+        for await (const piece of paginate(({ cursor }) => getPieces(client, { dataSet, address: owner, cursor }))) {
+          const pieceCid = piece.cid.toString()
+          const copy = {
+            providerId: String(dataSet.providerId),
+            dataSetId: String(dataSet.dataSetId),
+            pieceId: String(piece.id),
+          }
+          const known = found.get(pieceCid)
+          if (known !== undefined) {
+            known.copies.push(copy)
+            continue
+          }
+          const { url } = piece
+          found.set(pieceCid, {
+            pieceCid,
+            size: piece.cid.size,
+            copies: [copy],
+            read: async (offset, length) => {
+              if (url === null) throw new Error(`no provider serves piece ${pieceCid} now`)
+              return readRange(url, offset, length)
+            },
+          })
+        }
+      }
+      return [...found.values()]
+    },
   }
+}
+
+async function readRange(url: string, offset: number, length: number): Promise<Uint8Array> {
+  const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } })
+  if (!response.ok) throw new Error(`${url} answered ${response.status} ${response.statusText}`)
+  const bytes = await response.bytes()
+  // A server that ignores Range sends the whole piece with 200.
+  return response.status === 206 ? bytes : bytes.subarray(offset, offset + length)
 }

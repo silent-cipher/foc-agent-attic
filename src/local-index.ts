@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { type Keyholder, sameKeyholder, writePrivateFile } from './login.ts'
-import type { Header } from './piece.ts'
-import type { Copy } from './storage.ts'
+import { type Keyholder, type Login, sameKeyholder, writePrivateFile } from './login.ts'
+import { type Header, readHeader } from './piece.ts'
+import type { Copy, Storage } from './storage.ts'
 
 /** One backed-up session: its piece header and where the piece is stored. */
 export type IndexEntry = Header &
@@ -29,6 +29,48 @@ export function recordEntry(entry: IndexEntry): void {
   const index = readIndex(path)
   index.sessions[entry.sessionId] = entry
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+}
+
+/** Every session the index holds. */
+export function indexEntries(): IndexEntry[] {
+  return Object.values(readIndex(indexPath()).sessions)
+}
+
+/** Whether this machine has an index, even an empty one. */
+export function hasIndex(): boolean {
+  return existsSync(indexPath())
+}
+
+/**
+ * Writes a new index from the headers of the login's pieces on chain, keeping each session's newest piece.
+ * A piece whose header can't be read is skipped and reported: restore could not read it either.
+ */
+export async function rebuildIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
+  const pieces = await storage.pieces()
+  print(`Rebuilding the index from the headers of ${pieces.length} pieces`)
+  const index: Index = { sessions: {} }
+  // ponytail: one piece at a time; read several at once if rebuilds of long histories get slow.
+  for (const piece of pieces) {
+    let header: Header
+    try {
+      header = await readHeader(login.grant, piece)
+    } catch (error) {
+      print(`✗ Skipped piece ${piece.pieceCid}: ${error instanceof Error ? error.message : String(error)}`)
+      continue
+    }
+    const known = index.sessions[header.sessionId]
+    if (known === undefined || known.lastWriteAt < header.lastWriteAt) {
+      index.sessions[header.sessionId] = {
+        ...header,
+        ...login.keyholder,
+        pieceCid: piece.pieceCid,
+        size: piece.size,
+        copies: piece.copies,
+      }
+    }
+  }
+  writePrivateFile(indexPath(), `${JSON.stringify(index, null, 2)}\n`)
+  print(`✓ Index rebuilt: ${Object.keys(index.sessions).length} sessions`)
 }
 
 function indexPath(): string {

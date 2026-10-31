@@ -27,7 +27,7 @@ function claudeResume(home: Home, id: string): string {
   return result.stdout + result.stderr
 }
 
-test('a backed-up session, deleted locally, restores and Claude Code resumes it', {
+test('a backed-up session restores, on this machine and a new one, and Claude Code resumes it', {
   skip: ownerKey === undefined && 'set ATTIC_CALIBNET_PRIVATE_KEY to a funded calibnet wallet key',
   timeout: 1_200_000,
 }, async () => {
@@ -72,4 +72,24 @@ test('a backed-up session, deleted locally, restores and Claude Code resumes it'
     original
   )
   assert.doesNotMatch(claudeResume(home, id), /No conversation found/)
+
+  // A new machine: a new session key whose Grant is enough to rebuild the index and restore, unauthorized on chain.
+  const fresh = await tempHome()
+  runAttic(fresh, ['setup'], ENV)
+  const { SESSION_KEY: freshKey } = parseEnv(readFileSync(join(fresh.root, '.attic', 'session.env'), 'utf8'))
+  assert.ok(freshKey !== undefined && isHex(freshKey))
+  const freshGrant = await makeGrant({ ownerKey, sessionKey: freshKey, chainId: calibration.id, expires })
+  const rebuilt = await runAtticLive(fresh, ['setup', '--grant', freshGrant], ENV, 600_000)
+  assert.match(rebuilt.stdout, /✓ Index rebuilt: \d+ sessions/, rebuilt.stdout + rebuilt.stderr)
+
+  const listed = runAttic(fresh, ['sessions'], ENV)
+  assert.equal(listed.status, 0, listed.stderr)
+  assert.match(listed.stdout, new RegExp(`\\n${id} +claude-code +/tmp/attic-e2e `))
+  const again = await runAtticLive(fresh, ['restore', id], ENV, 300_000)
+  assert.equal(again.status, 0, again.stdout + again.stderr)
+  assert.deepEqual(
+    paths.map((path) => readFileSync(join(fresh.claude, path))),
+    original
+  )
+  assert.doesNotMatch(claudeResume(fresh, id), /No conversation found/)
 })

@@ -90,16 +90,7 @@ export async function openPiece(
   const view = new DataView(piece.buffer, piece.byteOffset, piece.byteLength)
   const length = piece.length >= 4 ? view.getUint32(0) : Number.POSITIVE_INFINITY
   if (4 + length > piece.length) throw new Error('The backup is damaged: its header is cut short.')
-  let header: unknown
-  try {
-    header = JSON.parse(new TextDecoder().decode(piece.subarray(4, 4 + length)))
-  } catch {
-    throw new Error('The backup is damaged: its header is not JSON.')
-  }
-  if (typeof header === 'object' && header !== null && 'v' in header && header.v !== 1) {
-    throw new Error(`The backup is format ${String(header.v)}, newer than this Attic. Update Attic to restore it.`)
-  }
-  if (!isHeader(header)) throw new Error('The backup is damaged: its header is not an Attic session header.')
+  const header = parseHeader(piece.subarray(4, 4 + length))
   const files: SessionFile[] = []
   let offset = 4 + length
   for (const { path, size, sha256: expected } of header.files) {
@@ -112,6 +103,46 @@ export async function openPiece(
   }
   if (offset !== piece.length) throw new Error('The backup is damaged: it has bytes after its last file.')
   return { header, files }
+}
+
+/**
+ * Reads a piece's header without downloading the rest: its envelope, then the chunks that hold the header.
+ *
+ * @throws With the reason, safe to print, when the piece does not decrypt, is damaged or is from a newer Attic.
+ */
+export async function readHeader(
+  grant: OpenedGrant,
+  piece: { size: number; read(offset: number, length: number): Promise<Uint8Array> }
+): Promise<Header> {
+  const source: fee.RandomAccessSource = {
+    size: piece.size,
+    openRange: async (offset, length) => ReadableStream.from([await piece.read(offset, length)]),
+  }
+  const info = await fee.parse(source)
+  if (info.scheme !== 'chunked' || info.contentType !== CONTENT_TYPE) {
+    throw new Error(`The piece is ${String(info.contentType)}, not an Attic session.`)
+  }
+  const cek = keyResolver(grant.key, grant.grant)(info)
+  const plaintext = async (offset: number, length: number) => {
+    const { stream } = await fee.decryptRange(source, cek, { offset, length }, { params: info.params })
+    return new Response(stream).bytes()
+  }
+  const prefix = await plaintext(0, 4)
+  return parseHeader(await plaintext(4, new DataView(prefix.buffer, prefix.byteOffset, 4).getUint32(0)))
+}
+
+function parseHeader(json: Uint8Array): Header {
+  let header: unknown
+  try {
+    header = JSON.parse(new TextDecoder().decode(json))
+  } catch {
+    throw new Error('The backup is damaged: its header is not JSON.')
+  }
+  if (typeof header === 'object' && header !== null && 'v' in header && header.v !== 1) {
+    throw new Error(`The backup is format ${String(header.v)}, newer than this Attic. Update Attic to restore it.`)
+  }
+  if (!isHeader(header)) throw new Error('The backup is damaged: its header is not an Attic session header.')
+  return header
 }
 
 function pipe(bytes: Uint8Array, transform: TransformStream<Uint8Array, Uint8Array>): Promise<Uint8Array> {

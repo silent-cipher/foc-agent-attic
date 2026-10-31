@@ -28,3 +28,9 @@ test('backup and restore take exactly one session ID that cannot leave the proje
     }
   }
 })
+
+test('sessions takes no arguments', async () => {
+  const result = await run(['sessions', 'extra'], () => undefined)
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /Unexpected argument 'extra'/)
+})

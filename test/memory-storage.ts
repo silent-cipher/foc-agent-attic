@@ -11,6 +11,8 @@ type MemoryState = {
   authorizedUntil: number
   quote: Quote
   storeError?: Error | undefined
+  /** Bytes downloaded or read by range. */
+  bytesRead: number
 }
 
 /**
@@ -19,7 +21,7 @@ type MemoryState = {
  */
 export function memoryStorage() {
   // 2100-01-01.
-  const state: MemoryState = { pieces: new Map(), authorizedUntil: 4102444800, quote: FUNDED }
+  const state: MemoryState = { pieces: new Map(), authorizedUntil: 4102444800, quote: FUNDED, bytesRead: 0 }
   const connect: Connect = () => ({
     authorizedUntil: async () => state.authorizedUntil,
     account: async () => state.quote,
@@ -33,7 +35,19 @@ export function memoryStorage() {
     async download(pieceCid) {
       const envelope = state.pieces.get(pieceCid)
       if (envelope === undefined) throw new Error(`No piece ${pieceCid}`)
+      state.bytesRead += envelope.length
       return envelope
+    },
+    async pieces() {
+      return [...state.pieces].map(([pieceCid, envelope], index) => ({
+        pieceCid,
+        size: envelope.length,
+        copies: [{ providerId: '1', dataSetId: '1', pieceId: String(index) }],
+        read: async (offset: number, length: number) => {
+          state.bytesRead += length
+          return envelope.slice(offset, offset + length)
+        },
+      }))
     },
   })
   return { state, connect }

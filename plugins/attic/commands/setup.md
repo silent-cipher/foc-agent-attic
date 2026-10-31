@@ -15,4 +15,6 @@ Then, by exit code:
 - **0:** show the checklist, the expiry date and the renewal link. Attic is ready. If the user wants to renew, ask them to open the link, approve with their wallet, and paste the new Grant here; then run setup again with `--grant <Grant>`. The session key stays the same.
 - **1:** show the error. If a Grant was refused, ask the user to copy it again from the console.
 
+On a machine without an index, setup also rebuilds it from the backups on chain, after the checklist and whatever the exit code. Show the `✓ Index rebuilt: N sessions` line and any `✗ Skipped piece` lines, and suggest `/attic:sessions` to list what was found.
+
 Never print the contents of `~/.attic/session.env`.
