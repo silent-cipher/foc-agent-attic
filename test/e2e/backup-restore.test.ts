@@ -68,6 +68,37 @@ test('backup of a session the index already holds unchanged, for this login, upl
   assert.match(result.stdout, new RegExp(`✓ Session ${ID} is already backed up, unchanged`))
 })
 
+test('--current selects the invoking agent, even when the other agent has the same ID', async () => {
+  for (const agent of ['claude-code', 'codex'] as const) {
+    const home = await tempHome()
+    await logIn(home)
+    const claudePaths = writeClaudeSession(home, ID)
+    const codexPaths = writeCodexSession(home, ID)
+    const paths = agent === 'codex' ? codexPaths : claudePaths
+    writeIndexEntry(home, paths, {}, agent)
+    const env = agent === 'codex' ? { CODEX_THREAD_ID: ID } : { CLAUDE_SESSION_ID: ID }
+    const result = runAttic(home, ['backup', '--current'], { ...CALIBRATION, ...env })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /already backed up, unchanged/)
+  }
+})
+
+test('--current refuses missing, ambiguous or unsafe context and conflicting arguments', async () => {
+  const home = await tempHome()
+  for (const [args, env, reason] of [
+    [['backup', '--current'], {}, /No current session ID/],
+    [['backup', '--current'], { CLAUDE_SESSION_ID: ID, CODEX_THREAD_ID: ID }, /Both agents supply/],
+    [['backup', '--current'], { CODEX_THREAD_ID: '../outside' }, /is not a session ID/],
+    [['backup', '--current', ID], { CODEX_THREAD_ID: ID }, /not both/],
+    [['restore', '--current'], { CODEX_THREAD_ID: ID }, /Unknown option/],
+  ] as const) {
+    const result = runAttic(home, args, env)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, reason)
+    assert.equal(result.stdout, '')
+  }
+})
+
 test('restore refuses a backup that this login cannot decrypt, before downloading it', async () => {
   const others: Partial<typeof KEYHOLDER>[] = [
     { groupKey: '0x0000000000000000000000000000000a' },

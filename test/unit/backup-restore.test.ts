@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseUnits } from 'viem'
@@ -53,6 +53,32 @@ test('a backed-up session, deleted locally, restores byte for byte', async () =>
     original
   )
   assert.ok(output.lines.includes(`claude --resume ${ID}`), output.lines.join('\n'))
+})
+
+test('active snapshots upload again only after their bytes change, for both agents', async () => {
+  for (const agent of ['claude-code', 'codex'] as const) {
+    const home = await loggedInHome()
+    const storage = memoryStorage()
+    const paths = agent === 'codex' ? writeCodexSession(home, ID) : writeClaudeSession(home, ID)
+    const [path] = paths
+    assert.ok(path)
+    const root = agent === 'codex' ? home.codex : home.claude
+    const transcript = join(root, path)
+    appendFileSync(transcript, '{"active')
+    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    const first = indexEntry(ID)
+    assert.ok(first)
+    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal(storage.state.pieces.size, 1)
+    appendFileSync(transcript, '":true}\n')
+    const expected = readFileSync(transcript)
+    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal(storage.state.pieces.size, 2)
+    assert.notEqual(indexEntry(ID)?.pieceCid, first.pieceCid)
+    rmSync(root, { recursive: true })
+    assert.equal(await restore(options(home), ID, printed().print, storage.connect), 0)
+    assert.deepEqual(readFileSync(transcript), expected)
+  }
 })
 
 test('a failed upload leaves no index entry, so the next backup uploads it', async () => {
