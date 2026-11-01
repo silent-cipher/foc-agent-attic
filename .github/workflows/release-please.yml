@@ -19,20 +19,46 @@ permissions:
   contents: read
 
 jobs:
-  # release-please tags a merged release PR on its push, so CI and the calibnet
-  # suite gate every push to main: a release is only tagged on a commit that passed both.
-  ci:
+  # release-please tags every merged, untagged release PR it finds, not only this push's.
+  # So releases are created only on the push that merged the release PR, once CI and
+  # the calibnet suite pass on that commit; other pushes only update the release PR.
+  release-merge:
     if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.check.outputs.merged }}
+    steps:
+      - name: Check whether this push merged the release PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          MERGED="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq 'any(.[]; any(.labels[]; .name == "autorelease: pending"))')"
+          echo "merged=$MERGED" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: release-merge
+    if: needs.release-merge.outputs.merged == 'true'
     uses: ./.github/workflows/ci.yml
 
   calibnet:
-    if: github.event_name == 'push'
+    needs: release-merge
+    if: needs.release-merge.outputs.merged == 'true'
     uses: ./.github/workflows/calibnet.yml
     secrets: inherit
 
   release-please:
-    needs: [ci, calibnet]
-    if: github.event_name == 'push'
+    needs: [release-merge, ci, calibnet]
+    # ci and calibnet are skipped unless this push merged the release PR.
+    if: |
+      !cancelled() && needs.release-merge.result == 'success' && (
+        needs.release-merge.outputs.merged != 'true' ||
+        (needs.ci.result == 'success' && needs.calibnet.result == 'success')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -49,6 +75,7 @@ jobs:
           # It needs the permissions in https://github.com/googleapis/release-please-action?tab=readme-ov-file#workflow-permissions.
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
           config-file: release-please-config.json
+          skip-github-release: ${{ needs.release-merge.outputs.merged != 'true' }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.release.outputs.release_created == 'true'

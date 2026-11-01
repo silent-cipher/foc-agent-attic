@@ -53,7 +53,9 @@ Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <ses
 
 ### Releasing
 
-[release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps the version in `package.json` and both plugin manifests and updates `CHANGELOG.md` from the conventional commit titles merged to `main`. Merging it releases: the **release-please** workflow runs CI and the calibnet suite on every push to `main`, and only once both pass does it tag `vX.Y.Z`, publish the GitHub release with `.github/release-notes.md` above the changelog, build the bundle and push it to the `release` branch. If publishing fails after the tag exists, dispatch the workflow on that tag to publish it again (`dry_run` checks it without pushing).
+[release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps the version in `package.json` and both plugin manifests and updates `CHANGELOG.md` from the conventional commit titles merged to `main`. Merging it releases: on that push, the **release-please** workflow runs CI and the calibnet suite on the merge commit, and only once both pass does it tag `vX.Y.Z`, publish the GitHub release with `.github/release-notes.md` above the changelog, build the bundle and push it to the `release` branch. Other pushes to `main` only update the release PR, and never tag an earlier release PR.
+
+If a check fails on a release merge, nothing is tagged. For a flaky failure, re-run the failed jobs of that run. For a real one, fix it on `main`, then remove the `autorelease: pending` label from the merged release PR so release-please opens a new one with the fix; check the version it proposes. If publishing fails after the tag exists, dispatch the workflow on that tag to publish it again (`dry_run` checks it without pushing).
 
 ## Logging in
 
