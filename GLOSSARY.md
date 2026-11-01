@@ -47,7 +47,7 @@ One pass of backing up: every due session, or the one session named. At most one
 _Avoid_: Job (the OS scheduler's word for what starts a run), sync
 
 **Data set**:
-Attic's storage on Filecoin for one owner, holding all their pieces.
+Attic's storage on Filecoin for one owner, group key and provider, holding their pieces across agents, projects and machines. See [the data set rules](docs/adr/0001-data-set-rules.md).
 
 ## Login
 
