@@ -15,6 +15,8 @@ Use the operation the user requested:
 - Restore: `node "<plugin root>/dist/attic.mjs" restore <session id>` with a 5-minute timeout.
 - Refresh: `node "<plugin root>/dist/attic.mjs" refresh` with a 5-minute timeout. It adds the sessions other machines backed up to this machine's index and never uploads.
 
+If the requested operation isn't listed, say this Attic version doesn't support it and suggest updating the plugin; never run another operation in its place.
+
 Ask for a session ID if restore was requested without one, or for a session ID or `--current` if backup was requested without either. Reject `--current` combined with a session ID; restore does not accept `--current`. The CLI searches Claude Code's home and Codex's `CODEX_HOME` (default `~/.codex`); it selects the restore destination from the backup's agent. It needs no agent flag.
 
 Show progress and errors as printed. Exit 0 means success, including an unchanged backup or identical existing restore. Exit 2 means the owner has a console action to complete: show the checklist and links exactly as printed, then wait for the user. Exit 1 means failure; show the error. After a timeout, show the last progress and any transaction hash; don't claim success.
