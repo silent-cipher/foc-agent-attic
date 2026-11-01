@@ -41,9 +41,13 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 
 `/attic:backup <session id>` backs up one Claude Code session now, even if it is still active: its transcript and its folder of subagents and tool results, under `~/.claude` (or `CLAUDE_CONFIG_DIR`). It checks the session key is authorized and USDFC is available, then packs a header (session ID, project, machine, title, first prompt and git branch when the transcript has them, each file's size and SHA-256) and the files into one piece, encrypts it under a fresh piece key, and stores it with one provider in an Attic data set. Only once the piece is committed does it record the piece in `~/.attic/index.json`, so a failed upload leaves nothing to clean up: run it again. Each index entry records the network, wallet and group key its piece is encrypted under. A session the index already holds unchanged, for the current login, is not uploaded again; after logging in with another wallet or group key, the next backup uploads it again, and restore refuses a backup the current login can't decrypt.
 
+`/attic:restore` accepts a description (for example, `/attic:restore yesterday's funding check`) or no argument: the agent offers the best matches with title, project and date, and restores only the session you choose. In Claude Code it uses a question dialog; in Codex, `$attic restore` asks a plain question. Giving a session ID restores directly without asking. If nothing matches, or an ID is missing from the index, the agent refreshes once and tries again before reporting no backup.
+
 `/attic:restore <session id>` downloads the session's piece, decrypts it, and checks every file's SHA-256 before writing anything. It refuses paths outside the session agent's folder and existing files that differ from the backup, writes the missing files, and prints `claude --resume <session id>`, which resumes the session from any folder.
 
 `/attic:sessions` lists the sessions in the index, newest first (ID, agent, project, last write, encrypted size, git branch, title), with the result of the last backup run, from `~/.attic/status.json`. A Claude Code session's title is the latest one Claude Code gave it, else its first prompt, shortened; sessions backed up before Attic recorded them show none until they change and are backed up again. `/attic:sessions <words>` lists only the sessions whose title, first prompt, project or git branch contain every word, ignoring case. It reads only local files, so it works offline. From 7 days before the Grant expires, it warns to run `/attic:setup` to renew it.
+
+`attic sessions --json` prints only the matching sessions as a JSON array, newest first, each with its session ID, agent, title, first prompt, project, branch and last write (title, first prompt and branch only when recorded). It accepts the same word filters and needs no login; an empty index or no matches produces `[]`.
 
 ## Other machines' backups
 
@@ -51,7 +55,7 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 
 If the listing fails, the index is left unchanged. A piece whose header can't be read (its provider is down, or it isn't an Attic session) is reported and left out, and the next refresh tries it again.
 
-Restore and `/attic:sessions` stay local: a session missing from the index has its restore fail with a hint to run `/attic:refresh`. On a machine with no `~/.attic/index.json`, `/attic:setup` runs the same refresh to build it.
+The CLI's restore and sessions operations stay local; the restore command and skill run the refresh-and-retry flow when a session is missing. On a machine with no `~/.attic/index.json`, `/attic:setup` runs the same refresh to build it.
 
 The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, then restores it on a second machine whose index already exists, through `refresh`, so it needs `claude` on `PATH`.
 

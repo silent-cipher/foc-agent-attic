@@ -44,6 +44,47 @@ function writeIndex(home: Home, entries: ReturnType<typeof entry>[]): void {
   writeFileSync(join(home.root, '.attic', 'index.json'), JSON.stringify({ sessions }))
 }
 
+test('sessions --json prints only what identifies each session, newest first, offline, with word filters', async () => {
+  const home = await tempHome()
+  const older = entry(ID, '/tmp/old', '2026-10-01T08:00:00.000Z', 2048)
+  const newer = {
+    ...entry(OTHER, '/tmp/new', '2026-10-28T09:12:00.000Z', 1536, {
+      title: 'Check funding',
+      firstPrompt: 'Why did the deposit fail?\nCheck the balance.',
+      branch: 'fix/funding',
+    }),
+    agent: 'codex',
+  }
+  const listing = (words: string[] = []) => {
+    const result = runAttic(home, ['sessions', '--json', ...words])
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stderr, '')
+    return JSON.parse(result.stdout)
+  }
+  assert.deepEqual(listing(), [])
+  writeIndex(home, [older, newer])
+  // Neither a login nor a readable backup status is needed to search the index.
+  writeFileSync(join(home.root, '.attic', 'status.json'), '{"ok":"invalid"}')
+  const newerListed = {
+    sessionId: OTHER,
+    agent: 'codex',
+    title: 'Check funding',
+    firstPrompt: 'Why did the deposit fail?\nCheck the balance.',
+    project: '/tmp/new',
+    branch: 'fix/funding',
+    lastWriteAt: '2026-10-28T09:12:00.000Z',
+  }
+  const olderListed = {
+    sessionId: ID,
+    agent: 'claude-code',
+    project: '/tmp/old',
+    lastWriteAt: '2026-10-01T08:00:00.000Z',
+  }
+  assert.deepEqual(listing(), [newerListed, olderListed])
+  assert.deepEqual(listing(['FUNDING', 'balance', '/tmp/new']), [newerListed])
+  assert.deepEqual(listing(['missing']), [])
+})
+
 test('sessions lists the index newest first, offline', async () => {
   const home = await tempHome()
   await logIn(home)
