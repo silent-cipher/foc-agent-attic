@@ -29,7 +29,7 @@ test('backup and restore take exactly one session ID that cannot leave the proje
   }
 })
 
-test('refresh takes no arguments and sessions no options', async () => {
+test('refresh takes no arguments and sessions rejects unknown options', async () => {
   const refresh = await run(['refresh', 'extra'], () => undefined)
   assert.equal(refresh.code, 1)
   assert.match(refresh.stderr, /Unexpected argument 'extra'/)

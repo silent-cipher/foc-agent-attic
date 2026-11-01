@@ -7,13 +7,14 @@ const WARN_DAYS = 7
 /**
  * Lists the backed-up sessions in the index, newest first, then how the last run ended and whether the session
  * key expires soon. With `words`, lists only the sessions whose title, first prompt, project or branch contain
- * every word, ignoring case. Reads only local files, so it works offline.
+ * every word, ignoring case. With `json`, prints only the entries as JSON, without status or login checks.
+ * Reads only local files, so it works offline.
  */
 export async function sessions(
   network: Network,
   words: readonly string[],
   print: (line: string) => void,
-  now = Math.floor(Date.now() / 1000)
+  { json = false, now = Math.floor(Date.now() / 1000) }: { json?: boolean; now?: number } = {}
 ): Promise<number> {
   const all = indexEntries()
   const needles = words.map((word) => word.toLowerCase())
@@ -23,6 +24,10 @@ export async function sessions(
       return needles.every((needle) => text.includes(needle))
     })
     .toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
+  if (json) {
+    print(JSON.stringify(entries))
+    return 0
+  }
   if (all.length === 0) {
     print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
     print('Backed up on another machine? Run /attic:refresh to add it to the index.')
