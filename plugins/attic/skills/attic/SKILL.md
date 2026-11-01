@@ -20,7 +20,7 @@ If the requested operation isn't listed, say this Attic version doesn't support 
 
 With no ID or `--current`, run the idle backup. Reject `--current` combined with a session ID; restore does not accept `--current`. The CLI searches Claude Code's home and Codex's `CODEX_HOME` (default `~/.codex`); it selects the restore destination from the backup's agent. It needs no agent flag.
 
-Show progress and errors as printed. Exit 0 means success, including an unchanged backup or identical existing restore. Exit 2 means the owner has a console action to complete: show the checklist and links exactly as printed, then wait for the user. Exit 1 means failure; show the error. After a timeout, show the last progress and any transaction hash; don't claim success.
+Show progress and errors as printed. Exit 0 means success, including an unchanged backup or identical existing restore. If another run holds the backup lock, report that this run was skipped. Exit 2 means the owner has a console action to complete: show the checklist and links exactly as printed, then wait for the user. Exit 1 means failure; show the error. After a timeout, show the last progress and any transaction hash; don't claim success.
 
 When setup requests authorization or the user wants to renew, ask them to open the printed console link, approve the session key with their wallet, and paste the Grant (`fgr1_…`). Then rerun setup with that Grant. The session key stays the same on renewal. If setup or refresh changes the index, show its `✓` line and any skipped pieces; the next refresh tries skipped pieces again. Suggest listing sessions afterward.
 
