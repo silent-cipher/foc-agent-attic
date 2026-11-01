@@ -3,11 +3,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { writePrivateFile } from './login.ts'
 
+/** How many sessions a run backed up, skipped as active or already backed up, and failed. */
+export type RunCounts = { backedUp: number; skipped: number; failed: number }
+
 /** How the last run on this machine ended, as `~/.attic/status.json` holds it. */
 export type LastRun = {
-  backedUp?: number
-  skipped?: number
-  failed?: number
+  /** Absent in status files written before runs were counted. */
+  counts?: RunCounts
   finishedAt: string
   ok: boolean
   /** The ✓ and ✗ lines the run printed. */

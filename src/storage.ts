@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { paginate } from '@filoz/synapse-core'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
@@ -9,7 +8,7 @@ import {
   fromSecp256k1,
   SchedulePieceRemovalsPermission,
 } from '@filoz/synapse-core/session-key'
-import { getPdpDataSets } from '@filoz/synapse-core/warm-storage'
+import { findMatchingDataSets, getPdpDataSets } from '@filoz/synapse-core/warm-storage'
 import { Synapse } from '@filoz/synapse-sdk'
 import { CHAINS, type Login } from './login.ts'
 
@@ -45,11 +44,11 @@ export type Storage = {
   /** Unix seconds until which the owner authorized the session key to store pieces; 0 when never. */
   authorizedUntil(): Promise<number>
   account(): Promise<Account>
-  quote(size: number | readonly number[]): Promise<Quote>
-  /** Resolves once the envelope is committed on chain. */
-  store(envelope: Uint8Array): Promise<Stored>
+  quote(sizes: readonly number[]): Promise<Quote>
+  /** Commits the envelopes in one add-pieces call where they fit, settling each once it is committed on chain. */
   storeBatch(envelopes: readonly Uint8Array[]): Promise<PromiseSettledResult<Stored>[]>
-  remove(copies: readonly Copy[]): Promise<void>
+  /** Schedules the providers to remove these copies, in one call per data set. */
+  scheduleRemoval(copies: readonly Copy[]): Promise<void>
   download(pieceCid: string): Promise<Uint8Array>
   /** Every piece in the owner's Attic data sets under this login's group key. */
   pieces(): Promise<StoredPiece[]>
@@ -85,15 +84,11 @@ export const synapseStorage: Connect = (login, progress) => {
       [KEYSPACE_ID_KEY]: login.grant.grant.keyspace,
       [COMMITMENT_KEY]: commitment(login.grant.key),
     }
-    let known: bigint | undefined
-    for await (const dataSet of paginate(({ cursor }) => getPdpDataSets(synapse.client, { address: owner, cursor }))) {
-      if (
-        dataSet.live &&
-        isDeepStrictEqual(dataSet.metadata, metadata) &&
-        (known === undefined || dataSet.dataSetId < known)
-      )
-        known = dataSet.dataSetId
-    }
+    const dataSets = await Array.fromAsync(
+      paginate(({ cursor }) => getPdpDataSets(synapse.client, { address: owner, cursor }))
+    )
+    // The SDK's choice among data sets that can still take pieces: live, managed and not terminated.
+    const known = findMatchingDataSets(dataSets, metadata, chain.legacyPieceStorageIdLimit)[0]?.dataSetId
     // One copy for v1; explicit IDs prevent a provider outage from creating another data set.
     const contexts = await synapse.storage.createContexts({
       copies: 1,
@@ -190,12 +185,12 @@ export const synapseStorage: Connect = (login, progress) => {
       ])
       return { storageApproved, availableFunds: account.availableFunds }
     },
-    async quote(size) {
+    async quote(sizes) {
       const { synapse, contexts } = await getUploads()
       progress(`Checking funds for provider ${contexts.map((context) => context.provider.id).join(', ')}`)
       const [costs, account] = await Promise.all([
         synapse.storage.calculateMultiContextCosts(contexts, {
-          pieceSizes: (typeof size === 'number' ? [size] : size).map((bytes) => BigInt(bytes)),
+          pieceSizes: sizes.map((bytes) => BigInt(bytes)),
         }),
         getAccountSummary(synapse.client, { address: owner }),
       ])
@@ -205,14 +200,8 @@ export const synapseStorage: Connect = (login, progress) => {
         availableFunds: account.availableFunds,
       }
     },
-    async store(envelope) {
-      const [result] = await storeBatch([envelope])
-      if (result === undefined) throw new Error('Upload returned no result.')
-      if (result.status === 'rejected') throw result.reason
-      return result.value
-    },
     storeBatch,
-    async remove(copies) {
+    async scheduleRemoval(copies) {
       const { synapse } = await getUploads()
       const groups = Map.groupBy(copies, (copy) => copy.dataSetId)
       for (const [id, held] of groups) {

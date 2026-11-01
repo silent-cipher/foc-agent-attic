@@ -28,7 +28,8 @@ export function recordEntry(entry: IndexEntry): Copy[] {
   const path = indexPath()
   const index = readIndex(path)
   const known = index.sessions[entry.sessionId]
-  if (known !== undefined && sameKeyholder(known, entry) && known.lastWriteAt > entry.lastWriteAt) return []
+  // A refresh during the upload can index a newer piece; removing it would lose that backup.
+  if (known !== undefined && hasNewer(known, entry, entry.lastWriteAt)) return []
   index.sessions[entry.sessionId] = entry
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
   return known !== undefined && sameKeyholder(known, entry) && known.pieceCid !== entry.pieceCid ? known.copies : []
@@ -114,6 +115,11 @@ function readIndex(path: string): Index {
     throw new Error(`${path} is not an Attic index. Fix it, or move it away.`)
   }
   return index
+}
+
+/** Whether `entry` backs up a snapshot newer than `lastWriteAt`, readable by `keyholder`. */
+export function hasNewer(entry: IndexEntry, keyholder: Keyholder, lastWriteAt: string): boolean {
+  return sameKeyholder(entry, keyholder) && entry.lastWriteAt > lastWriteAt
 }
 
 /** Whether `entry` already backs up these exact files, readable by `keyholder`. */

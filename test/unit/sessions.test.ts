@@ -165,8 +165,8 @@ test('sessions shows how the last backup run ended', async () => {
 
   storage.state.authorizedUntil = 4102444800
   storage.state.storeError = new Error('commit timed out\nRequest body: …')
-  await assert.rejects(backup(options(home), OTHER, printed().print, storage.connect))
-  assert.match((await listed()).join('\n'), /UTC failed:\n {2}✗ commit timed out$/)
+  assert.equal(await backup(options(home), OTHER, printed().print, storage.connect), 1)
+  assert.match((await listed()).join('\n'), new RegExp(`UTC failed:\\n {2}✗ Session ${OTHER}: commit timed out$`))
 })
 
 test('sessions warns from 7 days before the session key expires', async () => {

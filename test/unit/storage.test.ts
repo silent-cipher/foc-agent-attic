@@ -4,6 +4,7 @@ import { setImmediate } from 'node:timers/promises'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { from } from '@filoz/synapse-core/piece'
 import * as sessionKeys from '@filoz/synapse-core/session-key'
+import * as warmStorage from '@filoz/synapse-core/warm-storage'
 import type { CreateContextsOptions, UploadCallbacks } from '@filoz/synapse-sdk'
 import { openLogin } from '../../src/login.ts'
 import { logIn, tempHome } from '../e2e/helpers.ts'
@@ -18,7 +19,16 @@ type Uploaded = {
   complete: boolean
   copies: { providerId: bigint; dataSetId: bigint; pieceId: bigint }[]
 }
-let dataSets: { live: boolean; dataSetId: bigint; metadata: Record<string, string> }[] = []
+type DataSet = {
+  live: boolean
+  managed: boolean
+  pdpEndEpoch: bigint
+  hasActivePieces: boolean
+  providerId: bigint
+  dataSetId: bigint
+  metadata: Record<string, string>
+}
+let dataSets: DataSet[] = []
 let targets: CreateContextsOptions[] = []
 let pending: { id: number; result: ReturnType<typeof Promise.withResolvers<Uploaded>> }[] = []
 let batches: number[][] = []
@@ -38,6 +48,7 @@ mock.module('@filoz/synapse-core/session-key', {
 })
 mock.module('@filoz/synapse-core/warm-storage', {
   namedExports: {
+    ...warmStorage,
     getPdpDataSets: async () => ({ items: dataSets }),
   },
 })
@@ -108,24 +119,26 @@ beforeEach(() => {
   context.dataSetId = undefined
 })
 
-async function fixture(known = true) {
+async function fixture(known: Partial<DataSet>[] = [{}]) {
   const home = await tempHome()
   process.env.HOME = home.root
   await logIn(home)
   const login = await openLogin('calibration')
-  if (known)
-    dataSets = [
-      {
-        live: true,
-        dataSetId: 7n,
-        metadata: {
-          source: 'attic',
-          'foc/enc': '1',
-          [KEYSPACE_ID_KEY]: login.grant.grant.keyspace,
-          [COMMITMENT_KEY]: commitment(login.grant.key),
-        },
-      },
-    ]
+  dataSets = known.map((overrides) => ({
+    live: true,
+    managed: true,
+    pdpEndEpoch: 0n,
+    hasActivePieces: true,
+    providerId: 1n,
+    dataSetId: 7n,
+    metadata: {
+      source: 'attic',
+      'foc/enc': '1',
+      [KEYSPACE_ID_KEY]: login.grant.grant.keyspace,
+      [COMMITMENT_KEY]: commitment(login.grant.key),
+    },
+    ...overrides,
+  }))
   return synapseStorage(login, () => undefined)
 }
 const envelopes = () => Array.from({ length: 10 }, (_, id) => new Uint8Array([id]))
@@ -153,7 +166,7 @@ test('known data sets receive one batch, at most four transfers, and ordered res
 })
 
 test('a first run establishes one data set alone before batching the rest', async () => {
-  const storage = await fixture(false)
+  const storage = await fixture([])
   const results = await storage.storeBatch(envelopes())
   assert.equal(
     results.every((result) => result.status === 'fulfilled'),
@@ -168,7 +181,7 @@ test('a first run establishes one data set alone before batching the rest', asyn
 })
 
 test('a failed first transfer does not prevent another session establishing the data set', async () => {
-  const storage = await fixture(false)
+  const storage = await fixture([])
   failStore = 0
   const results = await storage.storeBatch(envelopes())
   assert.equal(results[0]?.status, 'rejected')
@@ -189,7 +202,7 @@ test('incomplete SDK results fail rather than recording successful backups', asy
   const results = await storage.storeBatch(envelopes())
   assert.equal(results[2]?.status, 'rejected')
   assert.equal(results.filter((result) => result.status === 'fulfilled').length, 9)
-  await assert.rejects(storage.store(new Uint8Array([2])), /did not commit all configured copies/)
+  assert.match(String(results[2]?.status === 'rejected' && results[2].reason), /did not commit all configured copies/)
 })
 
 test('a known provider outage fails without falling back to a new data set', async () => {
@@ -203,9 +216,34 @@ test('a known provider outage fails without falling back to a new data set', asy
   assert.equal(creations, 0)
 })
 
+test('uploads skip terminated, unmanaged and dead data sets for the oldest one that can take pieces', async () => {
+  const storage = await fixture([
+    { dataSetId: 3n, pdpEndEpoch: 100n },
+    { dataSetId: 4n, managed: false },
+    { dataSetId: 5n, live: false },
+    { dataSetId: 9n },
+    { dataSetId: 8n },
+  ])
+  await storage.storeBatch(envelopes())
+  assert.deepEqual(
+    targets.map((target) => target.dataSetIds),
+    [[8n]]
+  )
+})
+
+test('only terminated data sets leave the SDK to open a new one', async () => {
+  const storage = await fixture([{ dataSetId: 3n, pdpEndEpoch: 100n }])
+  await storage.storeBatch(envelopes())
+  assert.deepEqual(
+    targets.map((target) => target.dataSetIds),
+    [undefined]
+  )
+  assert.equal(creations, 1)
+})
+
 test('removals are grouped into one call per data set', async () => {
   const storage = await fixture()
-  await storage.remove([
+  await storage.scheduleRemoval([
     { providerId: '1', dataSetId: '7', pieceId: '1' },
     { providerId: '1', dataSetId: '7', pieceId: '2' },
     { providerId: '2', dataSetId: '8', pieceId: '3' },

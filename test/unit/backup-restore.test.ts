@@ -89,7 +89,9 @@ test('a failed upload leaves no index entry, so the next backup uploads it', asy
   writeClaudeSession(home, ID)
   storage.state.storeError = new Error('commit timed out')
 
-  await assert.rejects(backup(options(home), ID, printed().print, storage.connect), /commit timed out/)
+  const output = printed()
+  assert.equal(await backup(options(home), ID, output.print, storage.connect), 1)
+  assert.ok(output.lines.includes(`✗ Session ${ID}: commit timed out`), output.lines.join('\n'))
   assert.equal(indexEntry(ID), undefined)
 
   storage.state.storeError = undefined

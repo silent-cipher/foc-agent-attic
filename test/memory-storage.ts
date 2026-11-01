@@ -53,9 +53,8 @@ export function memoryStorage() {
     authorizedUntil: async () => state.authorizedUntil,
     account: async () => state.quote,
     quote: async () => state.quote,
-    store,
     storeBatch: async (envelopes) => Promise.allSettled(envelopes.map(store)),
-    async remove(obsolete) {
+    async scheduleRemoval(obsolete) {
       for (const [cid, copy] of copies) {
         if (obsolete.some((old) => old.dataSetId === copy.dataSetId && old.pieceId === copy.pieceId)) {
           state.pieces.delete(cid)

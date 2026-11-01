@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -67,7 +68,7 @@ test('the idle run discovers both agents, skips active files, and snapshots befo
     files.map((file) => Buffer.from(file.bytes)),
     original
   )
-  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [2, 1, 0])
+  assert.deepEqual(lastRun()?.counts, { backedUp: 2, skipped: 1, failed: 0 })
   assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), false)
 })
 
@@ -95,7 +96,7 @@ test('refresh imports another machine before unchanged sessions skip all writes'
   assert.equal(await backup(f.options, undefined, f.print, connect), 0)
   assert.equal(f.state.pieces.size, 1)
   assert.ok(indexEntry(ID))
-  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [0, 1, 0])
+  assert.deepEqual(lastRun()?.counts, { backedUp: 0, skipped: 1, failed: 0 })
 })
 
 test('failed sessions retain their old piece while successful replacements remove once after indexing', async () => {
@@ -123,17 +124,14 @@ test('failed sessions retain their old piece while successful replacements remov
       async storeBatch(envelopes) {
         const [first] = envelopes
         assert.ok(first)
-        return [
-          { status: 'fulfilled', value: await storage.store(first) },
-          { status: 'rejected', reason: new Error('provider failed') },
-        ]
+        return [...(await storage.storeBatch([first])), { status: 'rejected', reason: new Error('provider failed') }]
       },
-      async remove(copies) {
+      async scheduleRemoval(copies) {
         removals++
         assert.notEqual(indexEntry(ID)?.pieceCid, previous.pieceCid)
         assert.equal(indexEntry(OTHER)?.pieceCid, previousOther.pieceCid)
         assert.deepEqual(copies, previous.copies)
-        await storage.remove(copies)
+        await storage.scheduleRemoval(copies)
       },
     }
   }
@@ -141,9 +139,9 @@ test('failed sessions retain their old piece while successful replacements remov
   assert.equal(removals, 1)
   assert.equal(f.state.pieces.has(previous.pieceCid), false)
   assert.equal(f.state.pieces.has(previousOther.pieceCid), true)
-  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [1, 0, 1])
+  assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 0, failed: 1 })
   assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
-  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [1, 1, 0])
+  assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 1, failed: 0 })
 })
 
 test('a malformed session does not stop another session, and a failed listing releases the lock', async () => {
@@ -155,29 +153,36 @@ test('a malformed session does not stop another session, and a failed listing re
   assert.equal(await backup(f.options, undefined, f.print, f.connect), 1)
   assert.ok(indexEntry(OTHER))
   assert.equal(indexEntry(ID), undefined)
-  assert.equal(lastRun()?.failed, 1)
+  assert.equal(lastRun()?.counts?.failed, 1)
   f.state.listError = new Error('RPC unavailable')
   await assert.rejects(backup(f.options, undefined, f.print, f.connect), /RPC unavailable/)
   assert.equal(lastRun()?.ok, false)
   assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), false)
 })
 
-test('a locked run exits without connecting or replacing the previous status', async () => {
+test('a lock held by a running process skips the run, and the lock of a stopped process is replaced', async () => {
   const f = await fixture()
-  const path = join(f.home.root, '.attic', 'status.json')
-  writeFileSync(path, 'previous status')
-  mkdirSync(join(f.home.root, '.attic', 'backup.lock'))
+  const lock = join(f.home.root, '.attic', 'backup.lock')
+  mkdirSync(lock)
+  writeFileSync(join(lock, 'pid'), String(process.pid))
   assert.equal(
     await backup(f.options, undefined, f.print, () => {
       throw new Error('must not connect')
     }),
     0
   )
-  assert.equal(readFileSync(path, 'utf8'), 'previous status')
-  assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), true)
+  assert.equal(lastRun(), undefined)
+  assert.equal(existsSync(lock), true)
+
+  const stopped = spawnSync(process.execPath, ['-e', '']).pid
+  writeFileSync(join(lock, 'pid'), String(stopped))
+  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.ok(f.lines.includes(`Removed the lock of stopped backup process ${stopped}.`), f.lines.join('\n'))
+  assert.equal(lastRun()?.ok, true)
+  assert.equal(existsSync(lock), false)
 })
 
-test('older explicit snapshots preserve the newer backup, and idle runs skip stale local copies', async () => {
+test('explicit and idle runs upload nothing for a snapshot older than the indexed backup', async () => {
   const f = await fixture()
   const paths = writeClaudeSession(f.home, ID)
   await backup(f.options, ID, f.print, f.connect)
@@ -185,13 +190,13 @@ test('older explicit snapshots preserve the newer backup, and idle runs skip sta
   assert.ok(newest)
   appendFileSync(join(f.home.claude, paths[0] ?? ''), '{}\n')
   age(f.home.claude, paths)
-  await backup(f.options, ID, f.print, f.connect)
+  assert.equal(await backup(f.options, ID, f.print, f.connect), 0)
+  assert.ok(f.lines.some((line) => line.startsWith(`✓ Skipped session ${ID}: the index holds a newer backup`)))
   assert.equal(indexEntry(ID)?.pieceCid, newest.pieceCid)
-  assert.equal(f.state.pieces.has(newest.pieceCid), true)
-  assert.equal(f.state.pieces.size, 2)
+  assert.equal(f.state.pieces.size, 1)
   assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
-  assert.equal(f.state.pieces.size, 2)
-  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [0, 1, 0])
+  assert.equal(f.state.pieces.size, 1)
+  assert.deepEqual(lastRun()?.counts, { backedUp: 0, skipped: 1, failed: 0 })
 })
 
 test('preflight failures count all due sessions and release the lock', async () => {
@@ -213,8 +218,40 @@ test('preflight failures count all due sessions and release the lock', async () 
           }),
     })
     await assert.rejects(backup(f.options, undefined, f.print, connect), /RPC unavailable/)
-    assert.equal(lastRun()?.failed, 1)
+    assert.equal(lastRun()?.counts?.failed, 1)
     assert.equal(lastRun()?.ok, false)
     assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), false)
   }
+})
+
+test('a run larger than the chunk size commits and removes one chunk at a time', async () => {
+  const f = await fixture()
+  const sessions = [
+    [f.home.claude, writeClaudeSession(f.home, ID)],
+    [f.home.codex, writeCodexSession(f.home, OTHER)],
+  ] as const
+  for (const [root, paths] of sessions) age(root, paths)
+  await backup(f.options, undefined, f.print, f.connect)
+  for (const [root, paths] of sessions) {
+    appendFileSync(join(root, paths[0] ?? ''), '{}\n')
+    age(root, paths)
+  }
+  const calls: string[] = []
+  const connect: Connect = (login, print) => {
+    const storage = f.connect(login, print)
+    return {
+      ...storage,
+      async storeBatch(envelopes) {
+        calls.push(`store ${envelopes.length}`)
+        return storage.storeBatch(envelopes)
+      },
+      async scheduleRemoval(copies) {
+        calls.push(`remove ${copies.length}`)
+        return storage.scheduleRemoval(copies)
+      },
+    }
+  }
+  assert.equal(await backup({ ...f.options, chunkBytes: 1 }, undefined, f.print, connect), 0)
+  assert.deepEqual(calls, ['store 1', 'remove 1', 'store 1', 'remove 1'])
+  assert.equal(f.state.pieces.size, 2)
 })
