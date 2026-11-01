@@ -56,6 +56,7 @@ const HEADER_READS = 8
 export async function refreshIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
   const held = new Set(indexEntries().map((entry) => entry.pieceCid))
   const listed = await storage.pieces()
+  const onChain = new Set(listed.map((piece) => piece.pieceCid))
   // ponytail: a session's older pieces and pieces that aren't sessions are never held, so every refresh reads
   // their headers again; remember them in the index if removal (#5) doesn't keep them few.
   const pieces = listed.filter((piece) => !held.has(piece.pieceCid))
@@ -89,8 +90,14 @@ export async function refreshIndex(login: Login, storage: Storage, print: (line:
   // Newest first, so a session's older pieces found in the same refresh are not counted.
   for (const entry of found.toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))) {
     const known = index.sessions[entry.sessionId]
-    // An entry this login can't decrypt loses to any piece it can.
-    if (known !== undefined && sameKeyholder(known, login.keyholder) && known.lastWriteAt >= entry.lastWriteAt) continue
+    // An entry this login can't decrypt, or whose piece was removed, loses to any piece it can read.
+    if (
+      known !== undefined &&
+      sameKeyholder(known, login.keyholder) &&
+      onChain.has(known.pieceCid) &&
+      known.lastWriteAt >= entry.lastWriteAt
+    )
+      continue
     if (known === undefined) added++
     else updated++
     index.sessions[entry.sessionId] = entry

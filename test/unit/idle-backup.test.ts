@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { type BackupOptions, backup } from '../../src/backup.ts'
@@ -163,8 +163,7 @@ test('a malformed session does not stop another session, and a failed listing re
 test('a lock held by a running process skips the run, and the lock of a stopped process is replaced', async () => {
   const f = await fixture()
   const lock = join(f.home.root, '.attic', 'backup.lock')
-  mkdirSync(lock)
-  writeFileSync(join(lock, 'pid'), String(process.pid))
+  writeFileSync(lock, String(process.pid))
   assert.equal(
     await backup(f.options, undefined, f.print, () => {
       throw new Error('must not connect')
@@ -175,10 +174,14 @@ test('a lock held by a running process skips the run, and the lock of a stopped 
   assert.equal(existsSync(lock), true)
 
   const stopped = spawnSync(process.execPath, ['-e', '']).pid
-  writeFileSync(join(lock, 'pid'), String(stopped))
+  writeFileSync(lock, String(stopped))
   assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
   assert.ok(f.lines.includes(`Removed the lock of stopped backup process ${stopped}.`), f.lines.join('\n'))
   assert.equal(lastRun()?.ok, true)
+  assert.equal(existsSync(lock), false)
+
+  writeFileSync(lock, '')
+  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
   assert.equal(existsSync(lock), false)
 })
 
@@ -224,7 +227,7 @@ test('preflight failures count all due sessions and release the lock', async () 
   }
 })
 
-test('a run larger than the chunk size commits and removes one chunk at a time', async () => {
+test('a session that would push its chunk over the limit starts the next chunk', async () => {
   const f = await fixture()
   const sessions = [
     [f.home.claude, writeClaudeSession(f.home, ID)],
@@ -251,7 +254,12 @@ test('a run larger than the chunk size commits and removes one chunk at a time',
       },
     }
   }
-  assert.equal(await backup({ ...f.options, chunkBytes: 1 }, undefined, f.print, connect), 0)
+  const [claude, codex] = sessions.map(([root, paths]) =>
+    paths.reduce((total, path) => total + statSync(join(root, path)).size, 0)
+  )
+  // Either session fits alone; both together do not.
+  const chunkBytes = Math.max(claude ?? 0, codex ?? 0) + 1
+  assert.equal(await backup({ ...f.options, chunkBytes }, undefined, f.print, connect), 0)
   assert.deepEqual(calls, ['store 1', 'remove 1', 'store 1', 'remove 1'])
   assert.equal(f.state.pieces.size, 2)
 })

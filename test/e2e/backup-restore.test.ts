@@ -174,7 +174,9 @@ test('backup without an ID starts the idle run and requires setup', async () => 
 
 test('backup without an ID skips a held lock and preserves status', async () => {
   const home = await tempHome()
-  mkdirSync(join(home.root, '.attic', 'backup.lock'), { recursive: true })
+  mkdirSync(join(home.root, '.attic'), { recursive: true })
+  // This test's process stays running while the CLI checks the lock.
+  writeFileSync(join(home.root, '.attic', 'backup.lock'), String(process.pid))
   const status = join(home.root, '.attic', 'status.json')
   writeFileSync(status, 'previous status')
   const result = runAttic(home, ['backup'], CALIBRATION)

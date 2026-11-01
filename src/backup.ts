@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import type { Agent, AgentSession } from './agent.ts'
@@ -61,7 +61,7 @@ export async function backup(
     recordRun({ finishedAt: new Date().toISOString(), ok: false, lines: [...lines, `✗ ${firstLine(error)}`], counts })
     throw error
   } finally {
-    rmSync(lock, { recursive: true })
+    rmSync(lock, { force: true })
   }
 }
 
@@ -114,13 +114,14 @@ async function run(
   let chunk: Due[] = []
   let size = 0
   for (const item of due) {
-    chunk.push(item)
-    size += item.bytes
-    if (size >= limit) {
+    // A session over the limit still gets a chunk of its own.
+    if (chunk.length > 0 && size + item.bytes > limit) {
       chunks.push(chunk)
       chunk = []
       size = 0
     }
+    chunk.push(item)
+    size += item.bytes
   }
   if (chunk.length > 0) chunks.push(chunk)
 
@@ -253,35 +254,36 @@ function firstLine(error: unknown): string {
 }
 
 /**
- * Takes the run lock, replacing a lock whose process has stopped.
+ * Takes the run lock, a file holding the running process's PID, replacing one whose process has stopped.
  *
  * @returns false while another live process holds it.
  */
 function takeLock(lock: string, print: (line: string) => void): boolean {
+  // Linking a written file creates the lock with its PID in one step, so no lock exists without one.
+  const claim = `${lock}.${process.pid}`
   try {
-    mkdirSync(lock, { mode: 0o700 })
+    writeFileSync(claim, String(process.pid), { mode: 0o600 })
+    linkSync(claim, lock)
+    return true
   } catch (error) {
     if (!hasCode(error, 'EEXIST')) throw error
-    const pid = lockHolder(lock)
-    if (pid === undefined || isRunning(pid)) return false
-    // ponytail: two runs replacing the same stopped lock at once can both proceed; a rename swap would close that.
-    rmSync(lock, { recursive: true })
-    print(`Removed the lock of stopped backup process ${pid}.`)
-    return takeLock(lock, print)
+  } finally {
+    rmSync(claim, { force: true })
   }
-  writeFileSync(join(lock, 'pid'), String(process.pid), { mode: 0o600 })
-  return true
-}
-
-/** The PID in the lock, or undefined while its run is still writing it. */
-function lockHolder(lock: string): number | undefined {
+  let holder: string
   try {
-    const pid = Number(readFileSync(join(lock, 'pid'), 'utf8'))
-    return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+    holder = readFileSync(lock, 'utf8')
   } catch (error) {
-    if (hasCode(error, 'ENOENT')) return undefined
+    // Released since the link failed.
+    if (hasCode(error, 'ENOENT')) return takeLock(lock, print)
     throw error
   }
+  const pid = Number(holder)
+  if (Number.isSafeInteger(pid) && pid > 0 && isRunning(pid)) return false
+  // ponytail: two runs replacing the same stopped lock at once can both proceed; a rename swap would close that.
+  rmSync(lock, { force: true })
+  print(`Removed the lock of stopped backup process ${holder}.`)
+  return takeLock(lock, print)
 }
 
 function isRunning(pid: number): boolean {

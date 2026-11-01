@@ -43,7 +43,7 @@ A backup skips a local snapshot older than the indexed backup, with or without a
 
 A changed session's old piece is scheduled for removal only after its replacement commits and is indexed, in one removal call per data set and add-pieces call. A failed removal leaves the old piece stored and reports failure; it does not undo the new backup. Existing session keys need `/attic:setup` reauthorization with the new `schedulePieceRemovals` scope before uploading. Backups still use one provider copy.
 
-Only one backup runs per machine, including explicit-ID backups. Another invocation exits while the process whose PID is in `~/.attic/backup.lock/pid` is running. The lock is removed when the run finishes or errors; a lock left by a killed process is replaced by the next run.
+Only one backup runs per machine, including explicit-ID backups. Another invocation exits while the process whose PID is in `~/.attic/backup.lock` is running. The lock is removed when the run finishes or errors; a lock left by a killed process is replaced by the next run.
 
 `/attic:backup --current` backs up the invoking Claude Code chat; in Codex, use `$attic backup --current`. Active sessions are included, with the bytes available when Attic reads them. Claude Code supplies the ID through its `${CLAUDE_SESSION_ID}` command/skill substitution; Codex supplies `CODEX_THREAD_ID` to the CLI. The CLI also accepts `CLAUDE_SESSION_ID` when explicitly supplied in its environment. Missing or ambiguous current-session context fails with guidance to give an explicit ID; Attic never picks the most recently modified session. Use either `--current` or an ID. Later backups use the same file hashes, so an unchanged snapshot is skipped and a changed session is uploaded again.
 
