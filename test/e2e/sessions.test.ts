@@ -55,14 +55,14 @@ test('sessions lists the index newest first, offline', async () => {
   assert.equal(result.stderr, '')
   assert.equal(result.status, 0)
   assert.deepEqual(result.stdout.split('\n').slice(0, 3), [
-    'Session ID                            Agent        Project   Last write (UTC)  Size     Title',
+    'Session ID                            Agent        Project   Last write (UTC)  Size     Branch  Title',
     `${OTHER}  claude-code  /tmp/new  2026-10-28 09:12  1.5 KiB`,
     `${ID}  claude-code  /tmp/old  2026-10-01 08:00  2.0 KiB`,
   ])
   assert.match(result.stdout, /No backup run has finished on this machine yet\./)
 })
 
-test('sessions shows each title, else the first prompt, and lists only the sessions matching every word', async () => {
+test('sessions shows each branch and title, else the first prompt, and lists only the sessions matching every word', async () => {
   const home = await tempHome()
   await logIn(home)
   const THIRD = '9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
@@ -73,9 +73,9 @@ test('sessions shows each title, else the first prompt, and lists only the sessi
   ])
   const rows = (args: string[]) => runAttic(home, ['sessions', ...args], CALIBRATION).stdout.split('\n')
   assert.deepEqual(rows([]).slice(1, 4), [
-    `${OTHER}  claude-code  /tmp/app   2026-10-28 09:12  1.5 KiB  Fix the login`,
+    `${OTHER}  claude-code  /tmp/app   2026-10-28 09:12  1.5 KiB  main        Fix the login`,
     `${THIRD}  claude-code  /tmp/site  2026-10-20 09:12  1.0 KiB`,
-    `${ID}  claude-code  /tmp/app   2026-10-01 08:00  2.0 KiB  Speed up the index`,
+    `${ID}  claude-code  /tmp/app   2026-10-01 08:00  2.0 KiB  feat/index  Speed up the index`,
   ])
   // Each word must match, in any field and any case: the title, the branch, the project.
   const cases: [string[], string][] = [
