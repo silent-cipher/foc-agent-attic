@@ -16,7 +16,7 @@ export async function sessions(
   const entries = indexEntries().toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
   if (entries.length === 0) {
     print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
-    print('On a new machine, /attic:setup rebuilds the index from your backups.')
+    print('Backed up on another machine? Run /attic:refresh to add it to the index.')
   } else {
     const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size']
     const rows = [

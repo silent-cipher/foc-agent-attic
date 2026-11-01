@@ -27,7 +27,7 @@ Try the plugin in Claude Code after `pnpm build`:
 claude --plugin-dir plugins/attic
 ```
 
-Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <session id>`, `/attic:sessions` and `/attic:restore <session id>`.
+Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <session id>`, `/attic:sessions`, `/attic:refresh` and `/attic:restore <session id>`.
 
 ## Logging in
 
@@ -45,17 +45,21 @@ A Grant can't be revoked: anyone holding `session.env` can read every backup und
 
 `/attic:sessions` lists the sessions in the index, newest first (ID, agent, project, last write, encrypted size), with the result of the last backup run, from `~/.attic/status.json`. It reads only local files, so it works offline. From 7 days before the Grant expires, it warns to run `/attic:setup` to renew it.
 
-## A new machine
+## Other machines' backups
 
-`/attic:setup` on a machine with no `~/.attic/index.json` rebuilds it from the chain: it lists the pieces in the owner's Attic data sets under the login's group key, decrypts only the start of each, where the header is, and keeps the newest piece of each session. This needs only the Grant, so sessions can be listed and restored before the new session key is authorized. A piece whose header can't be read is reported and left out, as restore could not read it either. Setup leaves an existing index alone; move it away to rebuild it.
+`/attic:refresh` adds the sessions other machines backed up to this machine's index. It lists the pieces in the owner's Attic data sets under the login's group key, and decrypts only the start of each piece the index doesn't already hold, where the header is, 8 at a time. It keeps the newest piece of each session, leaves every other entry alone, and reports how many sessions it added or updated. It only reads the chain into the index and never uploads. This needs only the Grant, so sessions can be listed and restored before a new session key is authorized.
 
-The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, then does the same on a new machine through an index rebuild, so it needs `claude` on `PATH`.
+If the listing fails, the index is left unchanged. A piece whose header can't be read (its provider is down, or it isn't an Attic session) is reported and left out, and the next refresh tries it again.
+
+Restore and `/attic:sessions` stay local: a session missing from the index has its restore fail with a hint to run `/attic:refresh`. On a machine with no `~/.attic/index.json`, `/attic:setup` runs the same refresh to build it.
+
+The calibnet suite backs up a session, deletes it, restores it, and checks Claude Code can resume it, then restores it on a second machine whose index already exists, through `refresh`, so it needs `claude` on `PATH`.
 
 ## Codex sessions and plugin
 
 The same backup, sessions and restore operations also handle Codex rollouts under `~/.codex/sessions` (or `$CODEX_HOME/sessions`). Attic saves the rollout JSONL byte for byte, including an active rollout's incomplete last line, and restores it to the same relative path under the destination Codex home. It reads the project from the initial `session_meta.payload.cwd` and prints `codex resume <id>` after restore. Global history, credentials, config, SQLite databases and archived sessions are not included; each subagent rollout is its own session ID.
 
-Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic restore <session id>` or `$attic version`. The CLI's `/attic:…` hints refer to the equivalent Claude Code commands.
+Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic refresh`, `$attic restore <session id>` or `$attic version`. The CLI's `/attic:…` hints refer to the equivalent Claude Code commands.
 
 For local development, run `pnpm install` and `pnpm build` first. Add the checkout as a local marketplace:
 

@@ -27,7 +27,7 @@ function claudeResume(home: Home, id: string): string {
   return result.stdout + result.stderr
 }
 
-test('a backed-up session restores, on this machine and a new one, and Claude Code resumes it', {
+test('a backed-up session restores, on this machine and after a refresh on another, and Claude Code resumes it', {
   skip: ownerKey === undefined && 'set ATTIC_CALIBNET_PRIVATE_KEY to a funded calibnet wallet key',
   timeout: 1_200_000,
 }, async () => {
@@ -55,6 +55,16 @@ test('a backed-up session restores, on this machine and a new one, and Claude Co
   }
   assert.equal(ready.status, 0, ready.stdout + ready.stderr)
 
+  // A second machine, set up before the backup: a new session key whose Grant is enough to refresh and restore,
+  // unauthorized on chain.
+  const fresh = await tempHome()
+  runAttic(fresh, ['setup'], ENV)
+  const { SESSION_KEY: freshKey } = parseEnv(readFileSync(join(fresh.root, '.attic', 'session.env'), 'utf8'))
+  assert.ok(freshKey !== undefined && isHex(freshKey))
+  const freshGrant = await makeGrant({ ownerKey, sessionKey: freshKey, chainId: calibration.id, expires })
+  const built = await runAtticLive(fresh, ['setup', '--grant', freshGrant], ENV, 600_000)
+  assert.match(built.stdout, /✓ (Index refreshed|The index is already up to date)/, built.stdout + built.stderr)
+
   const paths = writeClaudeSession(home, id)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
   const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
@@ -73,14 +83,9 @@ test('a backed-up session restores, on this machine and a new one, and Claude Co
   )
   assert.doesNotMatch(claudeResume(home, id), /No conversation found/)
 
-  // A new machine: a new session key whose Grant is enough to rebuild the index and restore, unauthorized on chain.
-  const fresh = await tempHome()
-  runAttic(fresh, ['setup'], ENV)
-  const { SESSION_KEY: freshKey } = parseEnv(readFileSync(join(fresh.root, '.attic', 'session.env'), 'utf8'))
-  assert.ok(freshKey !== undefined && isHex(freshKey))
-  const freshGrant = await makeGrant({ ownerKey, sessionKey: freshKey, chainId: calibration.id, expires })
-  const rebuilt = await runAtticLive(fresh, ['setup', '--grant', freshGrant], ENV, 600_000)
-  assert.match(rebuilt.stdout, /✓ Index rebuilt: \d+ sessions/, rebuilt.stdout + rebuilt.stderr)
+  const refreshed = await runAtticLive(fresh, ['refresh'], ENV, 300_000)
+  assert.equal(refreshed.status, 0, refreshed.stdout + refreshed.stderr)
+  assert.match(refreshed.stdout, /✓ Index refreshed: [1-9]\d* new sessions/, refreshed.stdout)
 
   const listed = runAttic(fresh, ['sessions'], ENV)
   assert.equal(listed.status, 0, listed.stderr)

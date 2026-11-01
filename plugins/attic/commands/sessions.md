@@ -7,6 +7,6 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/attic.mjs" sessions)
 
 Show the table above exactly as printed, with the full session IDs: `/attic:restore <session id>` takes them. Then show how the last run ended, and any ✗ or ⚠ line about the session key; if one says to run `/attic:setup`, suggest it.
 
-If it says the index is empty on a machine that has backups elsewhere, suggest `/attic:setup`: on a machine without an index, it rebuilds it from the backups on chain.
+If a session the user expects is missing, or the index is empty, suggest `/attic:refresh`: it adds the sessions other machines backed up. On a machine that isn't set up yet, suggest `/attic:setup`.
 
 Never print the contents of `~/.attic/session.env`.

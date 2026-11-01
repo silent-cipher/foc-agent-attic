@@ -41,36 +41,62 @@ export function hasIndex(): boolean {
   return existsSync(indexPath())
 }
 
+/** How many piece headers a refresh reads at once. */
+const HEADER_READS = 8
+
 /**
- * Writes a new index from the headers of the login's pieces on chain, keeping each session's newest piece.
- * A piece whose header can't be read is skipped and reported: restore could not read it either.
+ * Adds the login's pieces on chain that the index doesn't hold yet, keeping each session's newest piece and
+ * leaving every other entry alone. Writes the index only once every header is read, so a failed listing changes
+ * nothing. A piece whose header can't be read is skipped and reported, and read again by the next refresh.
  */
-export async function rebuildIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
-  const pieces = await storage.pieces()
-  print(`Rebuilding the index from the headers of ${pieces.length} pieces`)
-  const index: Index = { sessions: {} }
-  // ponytail: one piece at a time; read several at once if rebuilds of long histories get slow.
-  for (const piece of pieces) {
-    let header: Header
-    try {
-      header = await readHeader(login.grant, piece)
-    } catch (error) {
-      print(`✗ Skipped piece ${piece.pieceCid}: ${error instanceof Error ? error.message : String(error)}`)
-      continue
-    }
-    const known = index.sessions[header.sessionId]
-    if (known === undefined || known.lastWriteAt < header.lastWriteAt) {
-      index.sessions[header.sessionId] = {
-        ...header,
-        ...login.keyholder,
-        pieceCid: piece.pieceCid,
-        size: piece.size,
-        copies: piece.copies,
+export async function refreshIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
+  const held = new Set(indexEntries().map((entry) => entry.pieceCid))
+  const listed = await storage.pieces()
+  // ponytail: a session's older pieces and pieces that aren't sessions are never held, so every refresh reads
+  // their headers again; remember them in the index if removal (#5) doesn't keep them few.
+  const pieces = listed.filter((piece) => !held.has(piece.pieceCid))
+  print(`Found ${listed.length} pieces on chain, ${pieces.length} not in the index`)
+  const found: IndexEntry[] = []
+  const queue = pieces.values()
+  await Promise.all(
+    Array.from({ length: HEADER_READS }, async () => {
+      for (const piece of queue) {
+        try {
+          const header = await readHeader(login.grant, piece)
+          found.push({
+            ...header,
+            ...login.keyholder,
+            pieceCid: piece.pieceCid,
+            size: piece.size,
+            copies: piece.copies,
+          })
+        } catch (error) {
+          print(`✗ Skipped piece ${piece.pieceCid}: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
-    }
+    })
+  )
+
+  // Read again after the slow part, so a backup that finished meanwhile keeps its entry.
+  const path = indexPath()
+  const index = readIndex(path)
+  let added = 0
+  let updated = 0
+  // Newest first, so a session's older pieces found in the same refresh are not counted.
+  for (const entry of found.toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))) {
+    const known = index.sessions[entry.sessionId]
+    // An entry this login can't decrypt loses to any piece it can.
+    if (known !== undefined && sameKeyholder(known, login.keyholder) && known.lastWriteAt >= entry.lastWriteAt) continue
+    if (known === undefined) added++
+    else updated++
+    index.sessions[entry.sessionId] = entry
   }
-  writePrivateFile(indexPath(), `${JSON.stringify(index, null, 2)}\n`)
-  print(`✓ Index rebuilt: ${Object.keys(index.sessions).length} sessions`)
+  writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+  print(
+    added + updated === 0
+      ? `✓ The index is already up to date: ${Object.keys(index.sessions).length} sessions`
+      : `✓ Index refreshed: ${added} new sessions, ${updated} updated`
+  )
 }
 
 function indexPath(): string {
