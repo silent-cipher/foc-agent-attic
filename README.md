@@ -13,7 +13,7 @@ In Claude Code:
 /plugin install attic@attic
 ```
 
-In Codex, then start a new session:
+In Codex, add the marketplace and install Attic, then start a new session:
 
 ```sh
 codex plugin marketplace add silent-cipher/foc-agent-attic --ref release
