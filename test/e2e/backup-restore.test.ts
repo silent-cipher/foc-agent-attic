@@ -163,3 +163,24 @@ test('the CLI finds Codex rollouts under CODEX_HOME, skips unchanged backups and
   assert.equal(listed.status, 0, listed.stderr)
   assert.match(listed.stdout, new RegExp(`${ID} +codex +/tmp/attic-e2e`))
 })
+
+test('backup without an ID starts the idle run and requires setup', async () => {
+  const home = await tempHome()
+  const result = runAttic(home, ['backup'], CALIBRATION)
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Attic is not logged in.*setup first/)
+  assert.throws(() => statSync(join(home.root, '.attic', 'backup.lock')))
+})
+
+test('backup without an ID skips a held lock and preserves status', async () => {
+  const home = await tempHome()
+  mkdirSync(join(home.root, '.attic'), { recursive: true })
+  // This test's process stays running while the CLI checks the lock.
+  writeFileSync(join(home.root, '.attic', 'backup.lock'), String(process.pid))
+  const status = join(home.root, '.attic', 'status.json')
+  writeFileSync(status, 'previous status')
+  const result = runAttic(home, ['backup'], CALIBRATION)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /skipping this run/)
+  assert.equal(readFileSync(status, 'utf8'), 'previous status')
+})

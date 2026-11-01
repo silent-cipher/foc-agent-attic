@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { type BackupOptions, backup } from '../../src/backup.ts'
@@ -120,6 +120,30 @@ test("refresh keeps each session's newest piece, counting a newer one as updated
   // The older piece is not held now, so it is read again, and loses.
   assert.ok((await refresh(b, storage)).includes('✓ The index is already up to date: 1 sessions'))
   assert.equal(indexEntry(ID)?.pieceCid, newest?.pieceCid)
+})
+
+test('a replacement with the same timestamp wins over an indexed piece that was removed', async () => {
+  const storage = memoryStorage()
+  const a = await machine()
+  const transcript = join(a.claude, writeClaudeSession(a, ID)[0] ?? '')
+  const written = new Date('2026-01-01T00:00:00.000Z')
+  utimesSync(transcript, written, written)
+  assert.equal(await backup(options(a), ID, () => undefined, storage.connect), 0)
+  const first = indexEntry(ID)
+  assert.ok(first)
+  const b = await machine()
+  await refresh(b, storage)
+
+  at(a)
+  appendFileSync(transcript, '{"type":"assistant"}\n')
+  utimesSync(transcript, written, written)
+  assert.equal(await backup(options(a), ID, () => undefined, storage.connect), 0)
+  const replacement = indexEntry(ID)
+  assert.equal(replacement?.lastWriteAt, first.lastWriteAt)
+  assert.equal(storage.state.pieces.has(first.pieceCid), false)
+
+  assert.ok((await refresh(b, storage)).includes('✓ Index refreshed: 0 new sessions, 1 updated'))
+  assert.equal(indexEntry(ID)?.pieceCid, replacement?.pieceCid)
 })
 
 test("a session's older pieces found in the same refresh are not counted", async () => {

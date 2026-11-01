@@ -1,15 +1,20 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, readFileSync, rmSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import { parseEnv } from 'node:util'
 import { calibration } from '@filoz/synapse-core/chains'
-import { AddPiecesPermission, CreateDataSetPermission, loginSync } from '@filoz/synapse-core/session-key'
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  loginSync,
+  SchedulePieceRemovalsPermission,
+} from '@filoz/synapse-core/session-key'
 import { createWalletClient, http, isHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { type Home, runAttic, runAtticLive, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
+import { type Home, runAttic, runAtticLive, tempHome, writeClaudeSession, writeCodexSession } from '../e2e/helpers.ts'
 import { makeGrant } from '../make-grant.ts'
 
 const ownerKey = process.env.ATTIC_CALIBNET_PRIVATE_KEY
@@ -43,7 +48,7 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
   const owner = createWalletClient({ account: privateKeyToAccount(ownerKey), chain: calibration, transport: http() })
   await loginSync(owner, {
     address: privateKeyToAccount(sessionKey).address,
-    permissions: [CreateDataSetPermission, AddPiecesPermission],
+    permissions: [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission],
     expiresAt: BigInt(expires),
     origin: 'attic-calibnet-test',
   })
@@ -68,6 +73,8 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
   const title = `Calibnet ${id}`
   const paths = writeClaudeSession(home, id, title)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
+  const before = new Date(Date.now() - 26 * 60 * 60 * 1000)
+  for (const path of paths) utimesSync(join(home.claude, path), before, before)
   const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
   assert.equal(backedUp.status, 0, backedUp.stdout + backedUp.stderr)
   assert.match(backedUp.stdout, new RegExp(`✓ Backed up session ${id}: 2 files`))
@@ -101,4 +108,63 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
     original
   )
   assert.doesNotMatch(claudeResume(fresh, id), /No conversation found/)
+
+  await loginSync(owner, {
+    address: privateKeyToAccount(freshKey).address,
+    permissions: [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission],
+    expiresAt: BigInt(expires),
+    origin: 'attic-calibnet-test',
+  })
+  let freshReady = runAttic(fresh, ['setup'], ENV)
+  for (let attempt = 1; attempt < 6 && freshReady.status !== 0; attempt++) {
+    await setTimeout(10_000)
+    freshReady = runAttic(fresh, ['setup'], ENV)
+  }
+  assert.equal(freshReady.status, 0, freshReady.stdout + freshReady.stderr)
+  const codexId = crypto.randomUUID()
+  const remoteId = crypto.randomUUID()
+  const codexPaths = writeCodexSession(home, codexId)
+  const remotePaths = writeClaudeSession(fresh, remoteId)
+  appendFileSync(join(home.claude, paths[0] ?? ''), '{}\n')
+  const idle = new Date(Date.now() - 25 * 60 * 60 * 1000)
+  for (const [root, files] of [
+    [home.claude, paths],
+    [home.codex, codexPaths],
+    [fresh.claude, remotePaths],
+  ] as const) {
+    for (const path of files) utimesSync(join(root, path), idle, idle)
+  }
+  const concurrent = await Promise.all([
+    runAtticLive(home, ['backup'], ENV, 600_000),
+    runAtticLive(fresh, ['backup'], ENV, 600_000),
+  ])
+  for (const result of concurrent) {
+    assert.equal(result.status, 0, result.stdout + result.stderr)
+    const commits = new Set(
+      [...result.stdout.matchAll(/Committing on provider \d+, transaction (0x[0-9a-f]+)/g)].map((match) => match[1])
+    )
+    assert.equal(commits.size, 1, result.stdout)
+  }
+  for (const machine of [home, fresh]) {
+    const refreshed = await runAtticLive(machine, ['refresh'], ENV, 300_000)
+    assert.equal(refreshed.status, 0, refreshed.stdout + refreshed.stderr)
+    const listed = runAttic(machine, ['sessions', '--json'], ENV)
+    assert.equal(listed.status, 0, listed.stderr)
+    assert.ok(listed.stdout.includes(codexId) && listed.stdout.includes(remoteId), listed.stdout)
+  }
+  for (const [machine, sessionId] of [
+    [home, remoteId],
+    [fresh, codexId],
+  ] as const) {
+    const restored = await runAtticLive(machine, ['restore', sessionId], ENV, 300_000)
+    assert.equal(restored.status, 0, restored.stdout + restored.stderr)
+  }
+  assert.deepEqual(
+    remotePaths.map((path) => readFileSync(join(home.claude, path))),
+    remotePaths.map((path) => readFileSync(join(fresh.claude, path)))
+  )
+  assert.deepEqual(
+    codexPaths.map((path) => readFileSync(join(fresh.codex, path))),
+    codexPaths.map((path) => readFileSync(join(home.codex, path)))
+  )
 })

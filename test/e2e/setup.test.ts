@@ -37,7 +37,7 @@ test('setup saves a new session key, owner-readable only, and prints the console
   const url = new URL(link)
   assert.equal(url.origin + url.pathname, 'https://pay.filecoin.cloud/console/setup')
   assert.equal(url.searchParams.get('authorize'), address.toLowerCase())
-  assert.equal(url.searchParams.get('scopes'), 'createDataSet,addPieces')
+  assert.equal(url.searchParams.get('scopes'), 'createDataSet,addPieces,schedulePieceRemovals')
   assert.equal(url.searchParams.get('network'), 'mainnet')
   assert.equal(url.searchParams.get('node'), 'keyspace')
   assert.match(url.searchParams.get('pubkey') ?? '', /^0x04[0-9a-f]{128}$/)

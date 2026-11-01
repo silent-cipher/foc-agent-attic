@@ -23,12 +23,16 @@ export function indexEntry(sessionId: string): IndexEntry | undefined {
   return readIndex(indexPath()).sessions[sessionId]
 }
 
-/** Records `entry` as its session's newest backup, keeping every other session's entry. */
-export function recordEntry(entry: IndexEntry): void {
+/** Records the newest backup and returns superseded copies this keyholder can remove. */
+export function recordEntry(entry: IndexEntry): Copy[] {
   const path = indexPath()
   const index = readIndex(path)
+  const known = index.sessions[entry.sessionId]
+  // A refresh during the upload can index a newer piece; removing it would lose that backup.
+  if (known !== undefined && hasNewer(known, entry, entry.lastWriteAt)) return []
   index.sessions[entry.sessionId] = entry
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+  return known !== undefined && sameKeyholder(known, entry) && known.pieceCid !== entry.pieceCid ? known.copies : []
 }
 
 /** Every session the index holds. */
@@ -52,6 +56,7 @@ const HEADER_READS = 8
 export async function refreshIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
   const held = new Set(indexEntries().map((entry) => entry.pieceCid))
   const listed = await storage.pieces()
+  const onChain = new Set(listed.map((piece) => piece.pieceCid))
   // ponytail: a session's older pieces and pieces that aren't sessions are never held, so every refresh reads
   // their headers again; remember them in the index if removal (#5) doesn't keep them few.
   const pieces = listed.filter((piece) => !held.has(piece.pieceCid))
@@ -85,8 +90,14 @@ export async function refreshIndex(login: Login, storage: Storage, print: (line:
   // Newest first, so a session's older pieces found in the same refresh are not counted.
   for (const entry of found.toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))) {
     const known = index.sessions[entry.sessionId]
-    // An entry this login can't decrypt loses to any piece it can.
-    if (known !== undefined && sameKeyholder(known, login.keyholder) && known.lastWriteAt >= entry.lastWriteAt) continue
+    // An entry this login can't decrypt, or whose piece was removed, loses to any piece it can read.
+    if (
+      known !== undefined &&
+      sameKeyholder(known, login.keyholder) &&
+      onChain.has(known.pieceCid) &&
+      known.lastWriteAt >= entry.lastWriteAt
+    )
+      continue
     if (known === undefined) added++
     else updated++
     index.sessions[entry.sessionId] = entry
@@ -111,6 +122,11 @@ function readIndex(path: string): Index {
     throw new Error(`${path} is not an Attic index. Fix it, or move it away.`)
   }
   return index
+}
+
+/** Whether `entry` backs up a snapshot newer than `lastWriteAt`, readable by `keyholder`. */
+export function hasNewer(entry: IndexEntry, keyholder: Keyholder, lastWriteAt: string): boolean {
+  return sameKeyholder(entry, keyholder) && entry.lastWriteAt > lastWriteAt
 }
 
 /** Whether `entry` already backs up these exact files, readable by `keyholder`. */

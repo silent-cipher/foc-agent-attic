@@ -75,7 +75,7 @@ test('active snapshots upload again only after their bytes change, for both agen
     appendFileSync(transcript, '":true}\n')
     const expected = readFileSync(transcript)
     assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
-    assert.equal(storage.state.pieces.size, 2)
+    assert.equal(storage.state.pieces.size, 1)
     assert.notEqual(indexEntry(ID)?.pieceCid, first.pieceCid)
     rmSync(root, { recursive: true })
     assert.equal(await restore(options(home), ID, printed().print, storage.connect), 0)
@@ -89,7 +89,9 @@ test('a failed upload leaves no index entry, so the next backup uploads it', asy
   writeClaudeSession(home, ID)
   storage.state.storeError = new Error('commit timed out')
 
-  await assert.rejects(backup(options(home), ID, printed().print, storage.connect), /commit timed out/)
+  const output = printed()
+  assert.equal(await backup(options(home), ID, output.print, storage.connect), 1)
+  assert.ok(output.lines.includes(`✗ Session ${ID}: commit timed out`), output.lines.join('\n'))
   assert.equal(indexEntry(ID), undefined)
 
   storage.state.storeError = undefined
@@ -217,10 +219,10 @@ test('Codex renames wait for changed rollout bytes and unreadable titles do not 
     '{"type":"event_msg","payload":{"type":"user_message","message":"Fix search"}}\n'
   )
   assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
-  assert.equal(storage.state.pieces.size, 2)
+  assert.equal(storage.state.pieces.size, 1)
   assert.equal(indexEntry(ID)?.title, 'Renamed title')
   const login = await openLogin('calibration')
-  const envelope = [...storage.state.pieces.values()][1]
+  const envelope = storage.state.pieces.get(indexEntry(ID)?.pieceCid ?? '')
   assert.ok(envelope)
   const { header } = await openPiece(login.grant, envelope)
   assert.equal(header.title, 'Renamed title')

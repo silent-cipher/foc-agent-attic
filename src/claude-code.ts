@@ -14,6 +14,17 @@ export function claudeCode(home: string): Agent {
   return {
     name: 'claude-code',
     home,
+    sessionIds: () => {
+      const projects = join(home, 'projects')
+      if (!existsSync(projects)) return []
+      return readdirSync(projects, { withFileTypes: true }).flatMap((project) =>
+        project.isDirectory()
+          ? readdirSync(join(projects, project.name)).flatMap((name) =>
+              /^[\w-]+\.jsonl$/.test(name) ? [name.slice(0, -6)] : []
+            )
+          : []
+      )
+    },
     readSession: (id) => readClaudeSession(home, id),
     resumeCommand: (id) => `claude --resume ${id}`,
   }

@@ -2,13 +2,18 @@ import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { paginate } from '@filoz/synapse-core'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
 import { getPieces } from '@filoz/synapse-core/pdp-verifier'
-import { AddPiecesPermission, CreateDataSetPermission, fromSecp256k1 } from '@filoz/synapse-core/session-key'
-import { getPdpDataSets } from '@filoz/synapse-core/warm-storage'
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  fromSecp256k1,
+  SchedulePieceRemovalsPermission,
+} from '@filoz/synapse-core/session-key'
+import { findMatchingDataSets, getPdpDataSets } from '@filoz/synapse-core/warm-storage'
 import { Synapse } from '@filoz/synapse-sdk'
 import { CHAINS, type Login } from './login.ts'
 
 /** What every Attic session key is authorized for. */
-const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission]
+const PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission]
 
 /** Tags Attic's data sets, apart from other apps' data sets on the same wallet. */
 const SOURCE = 'attic'
@@ -32,14 +37,18 @@ export type StoredPiece = {
   read(offset: number, length: number): Promise<Uint8Array>
 }
 
+export type Stored = { pieceCid: string; copies: Copy[] }
+
 /** Attic's pieces on Filecoin, as one login reaches them. */
 export type Storage = {
   /** Unix seconds until which the owner authorized the session key to store pieces; 0 when never. */
   authorizedUntil(): Promise<number>
   account(): Promise<Account>
-  quote(size: number): Promise<Quote>
-  /** Resolves once the envelope is committed on chain. */
-  store(envelope: Uint8Array): Promise<{ pieceCid: string; copies: Copy[] }>
+  quote(sizes: readonly number[]): Promise<Quote>
+  /** Commits the envelopes in one add-pieces call where they fit, settling each once it is committed on chain. */
+  storeBatch(envelopes: readonly Uint8Array[]): Promise<PromiseSettledResult<Stored>[]>
+  /** Schedules the providers to remove these copies, in one call per data set. */
+  scheduleRemoval(copies: readonly Copy[]): Promise<void>
   download(pieceCid: string): Promise<Uint8Array>
   /** Every piece in the owner's Attic data sets under this login's group key. */
   pieces(): Promise<StoredPiece[]>
@@ -67,17 +76,24 @@ export const synapseStorage: Connect = (login, progress) => {
       sessionKey,
       requiredPermissions: PERMISSIONS,
       source: SOURCE,
-      pieceBatching: false,
+      pieceBatching: { wait: { kind: 'limiter' } },
     })
-    // One copy for v1: on calibnet the second provider's copy has stalled at "pending" for the SDK's full wait.
+    const metadata = {
+      source: SOURCE,
+      'foc/enc': '1',
+      [KEYSPACE_ID_KEY]: login.grant.grant.keyspace,
+      [COMMITMENT_KEY]: commitment(login.grant.key),
+    }
+    const dataSets = await Array.fromAsync(
+      paginate(({ cursor }) => getPdpDataSets(synapse.client, { address: owner, cursor }))
+    )
+    // The SDK's choice among data sets that can still take pieces: live, managed and not terminated.
+    const known = findMatchingDataSets(dataSets, metadata, chain.legacyPieceStorageIdLimit)[0]?.dataSetId
+    // One copy for v1; explicit IDs prevent a provider outage from creating another data set.
     const contexts = await synapse.storage.createContexts({
       copies: 1,
-      // filecoin-pin's tags for an encrypted data set, so the console reads it as one.
-      metadata: {
-        'foc/enc': '1',
-        [KEYSPACE_ID_KEY]: login.grant.grant.keyspace,
-        [COMMITMENT_KEY]: commitment(login.grant.key),
-      },
+      metadata,
+      ...(known === undefined ? {} : { dataSetIds: [known] }),
     })
     return { synapse, contexts }
   }
@@ -90,6 +106,70 @@ export const synapseStorage: Connect = (login, progress) => {
   const getReader = () => {
     reader ??= Synapse.create({ account: owner, chain, source: SOURCE })
     return reader
+  }
+
+  async function storeBatch(envelopes: readonly Uint8Array[]): Promise<PromiseSettledResult<Stored>[]> {
+    if (envelopes.length === 0) return []
+    const { synapse, contexts } = await getUploads()
+    async function uploadBatch(batch: readonly Uint8Array[]): Promise<PromiseSettledResult<Stored>[]> {
+      if (batch.length === 0) return []
+      const tasks: Promise<Stored>[] = []
+      const queue = batch.entries()
+      await Promise.all(
+        Array.from({ length: 4 }, async () => {
+          for (const [index, envelope] of queue) {
+            const parked = Promise.withResolvers<void>()
+            const result = synapse.storage
+              .upload(envelope, {
+                contexts,
+                callbacks: {
+                  onStored: (providerId, pieceCid) => {
+                    progress(`Stored on provider ${providerId} as piece ${pieceCid}`)
+                    parked.resolve()
+                  },
+                  onPiecesAdded: (hash, providerId) =>
+                    progress(`Committing on provider ${providerId}, transaction ${hash}`),
+                  onPiecesConfirmed: (dataSetId, providerId) =>
+                    progress(`Committed on provider ${providerId} in data set ${dataSetId}`),
+                },
+              })
+              .then((result) => {
+                if (!result.complete || result.copies.length !== contexts.length) {
+                  throw new Error('The upload did not commit all configured copies. Retry the backup.')
+                }
+                return {
+                  pieceCid: result.pieceCid.toString(),
+                  copies: result.copies.map((copy) => ({
+                    providerId: String(copy.providerId),
+                    dataSetId: String(copy.dataSetId),
+                    pieceId: String(copy.pieceId),
+                  })),
+                }
+              })
+            void result.then(
+              () => parked.resolve(),
+              () => parked.resolve()
+            )
+            tasks[index] = result
+            await parked.promise
+          }
+        })
+      )
+      // Upload failures still leave the other parked pieces to commit.
+      await synapse.storage.flush().catch((error: unknown) => {
+        progress(`Batch commit failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      return Promise.allSettled(tasks)
+    }
+    const results: PromiseSettledResult<Stored>[] = []
+    let next = 0
+    // Establish the data set before parallel uploads can try to create it.
+    while (next < envelopes.length && contexts.some((context) => context.dataSetId === undefined)) {
+      results.push(...(await uploadBatch(envelopes.slice(next, next + 1))))
+      next++
+    }
+    results.push(...(await uploadBatch(envelopes.slice(next))))
+    return results
   }
 
   return {
@@ -105,11 +185,13 @@ export const synapseStorage: Connect = (login, progress) => {
       ])
       return { storageApproved, availableFunds: account.availableFunds }
     },
-    async quote(size) {
+    async quote(sizes) {
       const { synapse, contexts } = await getUploads()
       progress(`Checking funds for provider ${contexts.map((context) => context.provider.id).join(', ')}`)
       const [costs, account] = await Promise.all([
-        synapse.storage.calculateMultiContextCosts(contexts, { pieceSizes: [BigInt(size)] }),
+        synapse.storage.calculateMultiContextCosts(contexts, {
+          pieceSizes: sizes.map((bytes) => BigInt(bytes)),
+        }),
         getAccountSummary(synapse.client, { address: owner }),
       ])
       return {
@@ -118,24 +200,14 @@ export const synapseStorage: Connect = (login, progress) => {
         availableFunds: account.availableFunds,
       }
     },
-    async store(envelope) {
-      const { synapse, contexts } = await getUploads()
-      const result = await synapse.storage.upload(envelope, {
-        contexts,
-        callbacks: {
-          onStored: (providerId, pieceCid) => progress(`Stored on provider ${providerId} as piece ${pieceCid}`),
-          onPiecesAdded: (hash, providerId) => progress(`Committing on provider ${providerId}, transaction ${hash}`),
-          onPiecesConfirmed: (dataSetId, providerId) =>
-            progress(`Committed on provider ${providerId} in data set ${dataSetId}`),
-        },
-      })
-      return {
-        pieceCid: result.pieceCid.toString(),
-        copies: result.copies.map((copy) => ({
-          providerId: String(copy.providerId),
-          dataSetId: String(copy.dataSetId),
-          pieceId: String(copy.pieceId),
-        })),
+    storeBatch,
+    async scheduleRemoval(copies) {
+      const { synapse } = await getUploads()
+      const groups = Map.groupBy(copies, (copy) => copy.dataSetId)
+      for (const [id, held] of groups) {
+        const context = await synapse.storage.createContext({ dataSetId: BigInt(id) })
+        const hash = await context.deletePieces({ pieces: held.map((copy) => BigInt(copy.pieceId)) })
+        progress(`Scheduled old pieces for removal from data set ${id}, transaction ${hash}`)
       }
     },
     download(pieceCid) {
