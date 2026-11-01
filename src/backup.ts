@@ -124,7 +124,12 @@ async function backupSession(
   recordEntry({ ...header, ...login.keyholder, pieceCid, size: envelope.length, copies })
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
   print(`  Piece ${pieceCid} in data set ${copies.map((copy) => copy.dataSetId).join(', ')}`)
-  if (previous !== undefined && sameKeyholder(previous, login.keyholder) && previous.pieceCid !== pieceCid) {
+  if (
+    previous !== undefined &&
+    sameKeyholder(previous, login.keyholder) &&
+    previous.lastWriteAt <= header.lastWriteAt &&
+    previous.pieceCid !== pieceCid
+  ) {
     await storage.remove(previous.copies)
   }
   return 0
@@ -147,6 +152,16 @@ async function backupIdle(
         const session = agent.readSession(id)
         const previous = indexEntry(id)
         if (
+          session !== undefined &&
+          previous !== undefined &&
+          sameKeyholder(previous, login.keyholder) &&
+          previous.lastWriteAt > session.lastWriteAt.toISOString()
+        ) {
+          counts.skipped++
+          print(`✓ Skipped session ${id}: a newer backup is already indexed.`)
+          continue
+        }
+        if (
           session === undefined ||
           session.lastWriteAt.getTime() > cutoff ||
           (previous !== undefined && isUpToDate(previous, login.keyholder, fileEntries(session.files)))
@@ -163,7 +178,11 @@ async function backupIdle(
     print(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
     return counts.failed === 0 ? 0 : 1
   }
-  if ((await storage.authorizedUntil()) <= Date.now() / 1000) {
+  const authorizedUntil = await storage.authorizedUntil().catch((error: unknown) => {
+    counts.failed += due.length
+    throw error
+  })
+  if (authorizedUntil <= Date.now() / 1000) {
     counts.failed += due.length
     print('✗ Session key not authorized, or its authorization expired. Run /attic:setup.')
     return 2
@@ -190,7 +209,11 @@ async function backupIdle(
     }
   }
   if (prepared.length === 0) return 1
-  const funding = checkFunding(await storage.quote(prepared.map(({ envelope }) => envelope.length)))
+  const quote = await storage.quote(prepared.map(({ envelope }) => envelope.length)).catch((error: unknown) => {
+    counts.failed += prepared.length
+    throw error
+  })
+  const funding = checkFunding(quote)
   if (!funding.ready) {
     counts.failed += prepared.length
     for (const line of funding.lines) print(line)
@@ -216,6 +239,7 @@ async function backupIdle(
       if (
         previous !== undefined &&
         sameKeyholder(previous, login.keyholder) &&
+        previous.lastWriteAt <= piece.header.lastWriteAt &&
         previous.pieceCid !== result.value.pieceCid
       ) {
         obsolete.push(...previous.copies)

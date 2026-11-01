@@ -73,6 +73,8 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
   const title = `Calibnet ${id}`
   const paths = writeClaudeSession(home, id, title)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
+  const before = new Date(Date.now() - 26 * 60 * 60 * 1000)
+  for (const path of paths) utimesSync(join(home.claude, path), before, before)
   const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
   assert.equal(backedUp.status, 0, backedUp.stdout + backedUp.stderr)
   assert.match(backedUp.stdout, new RegExp(`✓ Backed up session ${id}: 2 files`))

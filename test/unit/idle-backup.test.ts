@@ -176,3 +176,45 @@ test('a locked run exits without connecting or replacing the previous status', a
   assert.equal(readFileSync(path, 'utf8'), 'previous status')
   assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), true)
 })
+
+test('older explicit snapshots preserve the newer backup, and idle runs skip stale local copies', async () => {
+  const f = await fixture()
+  const paths = writeClaudeSession(f.home, ID)
+  await backup(f.options, ID, f.print, f.connect)
+  const newest = indexEntry(ID)
+  assert.ok(newest)
+  appendFileSync(join(f.home.claude, paths[0] ?? ''), '{}\n')
+  age(f.home.claude, paths)
+  await backup(f.options, ID, f.print, f.connect)
+  assert.equal(indexEntry(ID)?.pieceCid, newest.pieceCid)
+  assert.equal(f.state.pieces.has(newest.pieceCid), true)
+  assert.equal(f.state.pieces.size, 2)
+  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.equal(f.state.pieces.size, 2)
+  assert.deepEqual([lastRun()?.backedUp, lastRun()?.skipped, lastRun()?.failed], [0, 1, 0])
+})
+
+test('preflight failures count all due sessions and release the lock', async () => {
+  for (const stage of ['authorization', 'quote']) {
+    const f = await fixture()
+    age(f.home.claude, writeClaudeSession(f.home, ID))
+    const connect: Connect = (login, print) => ({
+      ...f.connect(login, print),
+      ...(stage === 'authorization'
+        ? {
+            authorizedUntil: async () => {
+              throw new Error('RPC unavailable')
+            },
+          }
+        : {
+            quote: async () => {
+              throw new Error('RPC unavailable')
+            },
+          }),
+    })
+    await assert.rejects(backup(f.options, undefined, f.print, connect), /RPC unavailable/)
+    assert.equal(lastRun()?.failed, 1)
+    assert.equal(lastRun()?.ok, false)
+    assert.equal(existsSync(join(f.home.root, '.attic', 'backup.lock')), false)
+  }
+})

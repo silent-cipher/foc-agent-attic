@@ -27,6 +27,8 @@ export function indexEntry(sessionId: string): IndexEntry | undefined {
 export function recordEntry(entry: IndexEntry): void {
   const path = indexPath()
   const index = readIndex(path)
+  const known = index.sessions[entry.sessionId]
+  if (known !== undefined && sameKeyholder(known, entry) && known.lastWriteAt > entry.lastWriteAt) return
   index.sessions[entry.sessionId] = entry
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
 }
