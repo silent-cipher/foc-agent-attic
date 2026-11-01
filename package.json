@@ -20,7 +20,7 @@
     "typecheck": "tsc",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test": "node --test 'test/unit/**/*.test.ts'",
+    "test": "node --experimental-test-module-mocks --test 'test/unit/**/*.test.ts'",
     "test:e2e": "pnpm build && node --test 'test/e2e/**/*.test.ts'",
     "test:calibnet": "pnpm build && node --test 'test/calibnet/**/*.test.ts'"
   },

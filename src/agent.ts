@@ -5,6 +5,8 @@ export type Agent = {
   name: Header['agent']
   /** The folder the agent keeps its sessions under; session file paths are relative to it. */
   home: string
+  /** Session IDs available locally. */
+  sessionIds(): string[]
   /** @returns undefined when the agent has no session with this ID. */
   readSession(id: string): AgentSession | undefined
   /** The command that resumes a session, from any folder. */

@@ -53,7 +53,7 @@ async function authorizeUrl(consoleUrl: string, network: Network, sessionKey: He
     message: `Keysmith key agreement key: ${pubkey}`,
   })
   // Lowercase: the console's strict address check refuses a mixed-case address with a bad checksum.
-  return `${consoleUrl}/console/setup?authorize=${account.address.toLowerCase()}&scopes=createDataSet,addPieces&network=${network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
+  return `${consoleUrl}/console/setup?authorize=${account.address.toLowerCase()}&scopes=createDataSet,addPieces,schedulePieceRemovals&network=${network}&pubkey=${pubkey}&pubkeysig=${pubkeysig}&node=keyspace`
 }
 
 /** What the chain says about the owner's account and this session key. */

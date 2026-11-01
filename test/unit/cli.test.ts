@@ -14,10 +14,9 @@ test('anything else prints usage and fails', async () => {
   }
 })
 
-test('backup and restore take exactly one session ID that cannot leave the projects folder', async () => {
+test('backup and restore reject extra or unsafe session IDs that cannot leave the projects folder', async () => {
   for (const command of ['backup', 'restore']) {
     for (const [args, reason] of [
-      [[], /Give one session ID/],
       [['a', 'b'], /Give one session ID/],
       [['../a'], /\.\.\/a is not a session ID/],
       [['a/b'], /a\/b is not a session ID/],
@@ -36,4 +35,10 @@ test('refresh takes no arguments and sessions rejects unknown options', async ()
   const sessions = await run(['sessions', '--extra'], () => undefined)
   assert.equal(sessions.code, 1)
   assert.match(sessions.stderr, /Unknown option '--extra'/)
+})
+
+test('restore still requires an ID', async () => {
+  const result = await run(['restore'], () => undefined)
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /Give one session ID/)
 })

@@ -5,7 +5,12 @@ import { test } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import { parseEnv } from 'node:util'
 import { calibration } from '@filoz/synapse-core/chains'
-import { AddPiecesPermission, CreateDataSetPermission, loginSync } from '@filoz/synapse-core/session-key'
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  loginSync,
+  SchedulePieceRemovalsPermission,
+} from '@filoz/synapse-core/session-key'
 import { createWalletClient, http, isHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { runAttic, tempHome } from '../e2e/helpers.ts'
@@ -35,7 +40,7 @@ test('setup sees a session key the owner authorized on calibnet', {
   const owner = createWalletClient({ account: privateKeyToAccount(ownerKey), chain: calibration, transport: http() })
   await loginSync(owner, {
     address: privateKeyToAccount(sessionKey).address,
-    permissions: [CreateDataSetPermission, AddPiecesPermission],
+    permissions: [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission],
     expiresAt: BigInt(expires),
     origin: 'attic-calibnet-test',
   })

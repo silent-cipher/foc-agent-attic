@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { setImmediate } from 'node:timers/promises'
 import { parseUnits } from 'viem'
-import type { Connect, Quote } from '../src/storage.ts'
+import type { Connect, Copy, Quote } from '../src/storage.ts'
 
 /** An account that can store anything: storage approved, nothing to deposit, 5 USDFC available. */
 const FUNDED: Quote = { storageApproved: true, depositNeeded: 0n, availableFunds: parseUnits('5', 18) }
@@ -39,15 +39,29 @@ export function memoryStorage() {
     readsInFlight: 0,
     maxReadsInFlight: 0,
   }
+  const copies = new Map<string, Copy>()
+  let nextId = 0
+  async function store(envelope: Uint8Array) {
+    if (state.storeError !== undefined) throw state.storeError
+    const pieceCid = `memory-${createHash('sha256').update(envelope).digest('hex')}`
+    const copy = { providerId: '1', dataSetId: '1', pieceId: String(nextId++) }
+    state.pieces.set(pieceCid, envelope)
+    copies.set(pieceCid, copy)
+    return { pieceCid, copies: [copy] }
+  }
   const connect: Connect = () => ({
     authorizedUntil: async () => state.authorizedUntil,
     account: async () => state.quote,
     quote: async () => state.quote,
-    async store(envelope) {
-      if (state.storeError !== undefined) throw state.storeError
-      const pieceCid = `memory-${createHash('sha256').update(envelope).digest('hex')}`
-      state.pieces.set(pieceCid, envelope)
-      return { pieceCid, copies: [{ providerId: '1', dataSetId: '1', pieceId: String(state.pieces.size - 1) }] }
+    store,
+    storeBatch: async (envelopes) => Promise.allSettled(envelopes.map(store)),
+    async remove(obsolete) {
+      for (const [cid, copy] of copies) {
+        if (obsolete.some((old) => old.dataSetId === copy.dataSetId && old.pieceId === copy.pieceId)) {
+          state.pieces.delete(cid)
+          copies.delete(cid)
+        }
+      }
     },
     async download(pieceCid) {
       const envelope = state.pieces.get(pieceCid)
@@ -57,10 +71,10 @@ export function memoryStorage() {
     },
     async pieces() {
       if (state.listError !== undefined) throw state.listError
-      return [...state.pieces].map(([pieceCid, envelope], index) => ({
+      return [...state.pieces].map(([pieceCid, envelope]) => ({
         pieceCid,
         size: envelope.length,
-        copies: [{ providerId: '1', dataSetId: '1', pieceId: String(index) }],
+        copies: [copies.get(pieceCid)].filter((copy) => copy !== undefined),
         read: async (offset: number, length: number) => {
           state.rangeReads.push(pieceCid)
           state.readsInFlight++

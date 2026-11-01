@@ -5,6 +5,9 @@ import { writePrivateFile } from './login.ts'
 
 /** How the last run on this machine ended, as `~/.attic/status.json` holds it. */
 export type LastRun = {
+  backedUp?: number
+  skipped?: number
+  failed?: number
   finishedAt: string
   ok: boolean
   /** The ✓ and ✗ lines the run printed. */

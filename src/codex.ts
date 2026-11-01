@@ -13,6 +13,16 @@ export function codex(home: string): Agent {
   return {
     name: 'codex',
     home,
+    sessionIds: () => {
+      const sessions = join(home, 'sessions')
+      if (!existsSync(sessions)) return []
+      return readdirSync(sessions, { recursive: true, withFileTypes: true }).flatMap((entry) => {
+        const id = entry.name.match(
+          /^rollout-.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i
+        )?.[1]
+        return entry.isFile() && id !== undefined ? [id] : []
+      })
+    },
     resumeCommand: (id) => `codex resume ${id}`,
     readSession: (id) => {
       const sessions = join(home, 'sessions')

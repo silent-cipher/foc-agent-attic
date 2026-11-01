@@ -49,19 +49,18 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   const transcript = join(old.claude, writeClaudeSession(old, ID)[0] ?? '')
   await backup(options(old), ID, printed().print, storage.connect)
   const [first] = storage.state.pieces.keys().drop(1)
+  const envelope = first === undefined ? undefined : storage.state.pieces.get(first)
   writeFileSync(transcript, `${readFileSync(transcript, 'utf8')}{"type":"assistant"}\n`)
   await backup(options(old), ID, printed().print, storage.connect)
   const newest = indexEntry(ID)
   // Listed last, so the rebuild must pick the newest piece by its header, not by listing order.
-  const envelope = first === undefined ? undefined : storage.state.pieces.get(first)
-  assert.ok(first !== undefined && envelope !== undefined && storage.state.pieces.delete(first))
+  assert.ok(first !== undefined && envelope !== undefined)
   storage.state.pieces.set(first, envelope)
 
   const fresh = await machine()
   const output = printed()
   assert.equal(await setup(options(fresh), output.print, storage.connect), 0)
   assert.ok(output.lines.includes('✓ Index refreshed: 2 new sessions, 0 updated'), output.lines.join('\n'))
-  // The fake numbers piece IDs by listing order, which the test changed.
   assert.deepEqual({ ...indexEntry(ID), copies: [] }, { ...newest, copies: [] })
 
   const [header, ...rows] = await listed()
