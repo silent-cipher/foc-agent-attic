@@ -69,8 +69,11 @@ export async function logIn(home: Home, grant?: string): Promise<void> {
   )
 }
 
-/** Writes a Claude Code session, one message and one subagent, and returns its paths under `home.claude`. */
-export function writeClaudeSession(home: Home, id: string): string[] {
+/**
+ * Writes a Claude Code session, one message and one subagent, and the title Claude Code gives it if `title` is
+ * set, and returns its paths under `home.claude`.
+ */
+export function writeClaudeSession(home: Home, id: string, title?: string): string[] {
   const project = join('projects', '-tmp-attic-e2e')
   // The fields Claude Code needs to list a transcript as a resumable conversation.
   const message = {
@@ -84,9 +87,11 @@ export function writeClaudeSession(home: Home, id: string): string[] {
     cwd: '/tmp/attic-e2e',
     userType: 'external',
     version: '2.1.312',
+    gitBranch: 'main',
   }
+  const aiTitle = title === undefined ? '' : `${JSON.stringify({ type: 'ai-title', aiTitle: title, sessionId: id })}\n`
   const files = {
-    [join(project, `${id}.jsonl`)]: `${JSON.stringify(message)}\n`,
+    [join(project, `${id}.jsonl`)]: `${JSON.stringify(message)}\n${aiTitle}`,
     [join(project, id, 'subagents', 'agent-a1.jsonl')]: '{"type":"assistant"}\n',
   }
   for (const [path, text] of Object.entries(files)) {

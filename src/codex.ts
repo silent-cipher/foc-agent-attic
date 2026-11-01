@@ -56,6 +56,7 @@ export function codex(home: string): Agent {
         files: [{ path: relative(home, path), bytes }],
         project: 'cwd' in meta.payload && typeof meta.payload.cwd === 'string' ? meta.payload.cwd : null,
         lastWriteAt: statSync(path).mtime,
+        about: {},
       }
     },
   }

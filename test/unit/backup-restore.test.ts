@@ -172,7 +172,7 @@ test('Codex backup restores on a new machine after index rebuild, and lists alon
   const fresh = await loggedInHome()
   assert.equal(await setup(options(fresh), printed().print, storage.connect), 0)
   const listing = printed()
-  await sessions('calibration', listing.print)
+  await sessions('calibration', [], listing.print)
   assert.match(listing.lines.join('\n'), new RegExp(`${ID} +codex +/tmp/attic-e2e`))
   assert.match(listing.lines.join('\n'), new RegExp(`${OTHER} +claude-code`))
   const output = printed()

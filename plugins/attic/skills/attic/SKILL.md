@@ -11,7 +11,7 @@ Use the operation the user requested:
 - Setup: `node "<plugin root>/dist/attic.mjs" setup`, adding `--grant <Grant>` only when the user supplies a Grant.
 - Backup: `node "<plugin root>/dist/attic.mjs" backup <session id>` with a 10-minute timeout.
 - Back up this chat: `node "<plugin root>/dist/attic.mjs" backup --current` in Codex, using its inherited `CODEX_THREAD_ID`. In Claude Code, use `node "<plugin root>/dist/attic.mjs" backup "${CLAUDE_SESSION_ID}"`, which Claude Code substitutes with the invoking session's ID. If the substitution is empty or still literal, report that the current session ID is unavailable; never guess from file timestamps.
-- List backups: `node "<plugin root>/dist/attic.mjs" sessions`
+- List backups: `node "<plugin root>/dist/attic.mjs" sessions`, adding each word the user gives as its own quoted argument to list only the sessions whose title, first prompt, project or branch contain every word, ignoring case.
 - Restore: `node "<plugin root>/dist/attic.mjs" restore <session id>` with a 5-minute timeout.
 - Refresh: `node "<plugin root>/dist/attic.mjs" refresh` with a 5-minute timeout. It adds the sessions other machines backed up to this machine's index and never uploads.
 

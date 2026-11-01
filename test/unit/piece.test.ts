@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { newSalt, pieceKey, pieceMetadata, writeTarget } from '@filoz/keysmith'
 import * as fee from 'filecoin-encryption-envelope'
 import { openGrant, SCOPE } from '../../src/grant.ts'
-import { CONTENT_TYPE, type Header, openPiece, sealPiece } from '../../src/piece.ts'
+import { CONTENT_TYPE, fileEntries, type Header, openPiece, sealPiece } from '../../src/piece.ts'
 import { CALIBRATION, makeGrant, SESSION_KEY, STRANGER_KEY } from '../make-grant.ts'
 
 const FIELDS: Omit<Header, 'v' | 'files'> = {
@@ -124,4 +124,15 @@ test('a header without the session fields is refused', async () => {
     openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, v: 1, sessionId: 7, files: [] }))),
     /not an Attic session header/
   )
+  await assert.rejects(
+    openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, v: 1, title: 7, files: [] }))),
+    /not an Attic session header/
+  )
+})
+
+test('a header carries what the session is about, within format 1', async () => {
+  const grant = await grantFor()
+  const about = { title: 'Speed up the index', firstPrompt: 'Fix the slow index', branch: 'feat/index' }
+  const { envelope } = await sealPiece(grant, { ...FIELDS, ...about }, FILES)
+  assert.deepEqual((await openPiece(grant, envelope)).header, { v: 1, ...FIELDS, ...about, files: fileEntries(FILES) })
 })

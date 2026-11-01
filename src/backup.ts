@@ -81,6 +81,7 @@ async function backupSession(
       project: session.project,
       machine: hostname(),
       lastWriteAt: session.lastWriteAt.toISOString(),
+      ...session.about,
     },
     session.files
   )

@@ -65,7 +65,8 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
   const built = await runAtticLive(fresh, ['setup', '--grant', freshGrant], ENV, 600_000)
   assert.match(built.stdout, /✓ (Index refreshed|The index is already up to date)/, built.stdout + built.stderr)
 
-  const paths = writeClaudeSession(home, id)
+  const title = `Calibnet ${id}`
+  const paths = writeClaudeSession(home, id, title)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
   const backedUp = await runAtticLive(home, ['backup', id], ENV, 600_000)
   assert.equal(backedUp.status, 0, backedUp.stdout + backedUp.stderr)
@@ -89,7 +90,10 @@ test('a backed-up session restores, on this machine and after a refresh on anoth
 
   const listed = runAttic(fresh, ['sessions'], ENV)
   assert.equal(listed.status, 0, listed.stderr)
-  assert.match(listed.stdout, new RegExp(`\\n${id} +claude-code +/tmp/attic-e2e `))
+  assert.match(listed.stdout, new RegExp(`\\n${id} +claude-code +/tmp/attic-e2e .* ${title}\\n`))
+  const filtered = runAttic(fresh, ['sessions', id.slice(0, 8)], ENV)
+  assert.deepEqual(filtered.stdout.split('\n')[1]?.split(' ')[0], id, filtered.stdout)
+  assert.match(filtered.stdout.split('\n')[2] ?? '', /^(Last run|No backup run)/, filtered.stdout)
   const again = await runAtticLive(fresh, ['restore', id], ENV, 300_000)
   assert.equal(again.status, 0, again.stdout + again.stderr)
   assert.deepEqual(
