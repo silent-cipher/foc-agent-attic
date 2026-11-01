@@ -74,16 +74,17 @@ test('sessions shows each title, else the first prompt, and lists only the sessi
     `${THIRD}  claude-code  /tmp/site  2026-10-20 09:12  1.0 KiB`,
     `${ID}  claude-code  /tmp/app   2026-10-01 08:00  2.0 KiB  Speed up the index`,
   ])
-  assert.match(rows(['INDEX', 'app'])[1] ?? '', new RegExp(`^${ID} `))
-  assert.match(rows(['INDEX', 'app'])[2] ?? '', /^No backup run/)
-  assert.match(rows(['main'])[1] ?? '', new RegExp(`^${OTHER} `))
-  assert.match(rows(['main'])[2] ?? '', /^No backup run/)
-  assert.deepEqual(
-    rows(['site'])
-      .slice(1, 2)
-      .map((row) => row.split(' ')[0]),
-    [THIRD]
-  )
+  // Each word must match, in any field and any case: the title, the branch, the project.
+  const cases: [string[], string][] = [
+    [['INDEX', 'app'], ID],
+    [['main'], OTHER],
+    [['site'], THIRD],
+  ]
+  for (const [words, id] of cases) {
+    const [, first, after] = rows(words)
+    assert.match(first ?? '', new RegExp(`^${id} `), words.join(' '))
+    assert.match(after ?? '', /^No backup run/, words.join(' '))
+  }
   const none = runAttic(home, ['sessions', 'index', 'login'], CALIBRATION)
   assert.equal(none.status, 0)
   assert.match(none.stdout, /^No sessions in the Attic index match index login\.\n/)
