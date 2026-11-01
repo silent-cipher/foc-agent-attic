@@ -23,14 +23,15 @@ export function indexEntry(sessionId: string): IndexEntry | undefined {
   return readIndex(indexPath()).sessions[sessionId]
 }
 
-/** Records `entry` as its session's newest backup, keeping every other session's entry. */
-export function recordEntry(entry: IndexEntry): void {
+/** Records the newest backup and returns superseded copies this keyholder can remove. */
+export function recordEntry(entry: IndexEntry): Copy[] {
   const path = indexPath()
   const index = readIndex(path)
   const known = index.sessions[entry.sessionId]
-  if (known !== undefined && sameKeyholder(known, entry) && known.lastWriteAt > entry.lastWriteAt) return
+  if (known !== undefined && sameKeyholder(known, entry) && known.lastWriteAt > entry.lastWriteAt) return []
   index.sessions[entry.sessionId] = entry
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+  return known !== undefined && sameKeyholder(known, entry) && known.pieceCid !== entry.pieceCid ? known.copies : []
 }
 
 /** Every session the index holds. */

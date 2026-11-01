@@ -49,6 +49,8 @@ export async function backup(
       id === undefined
         ? await backupIdle(options, tee, connect, counts)
         : await backupSession(options, id, tee, connect)
+    if (id === undefined)
+      tee(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
     recordRun({ finishedAt: new Date().toISOString(), ok: code === 0, lines, ...(id === undefined ? counts : {}) })
     return code
   } catch (error) {
@@ -121,17 +123,10 @@ async function backupSession(
     return 2
   }
   const { pieceCid, copies } = await storage.store(envelope)
-  recordEntry({ ...header, ...login.keyholder, pieceCid, size: envelope.length, copies })
+  const obsolete = recordEntry({ ...header, ...login.keyholder, pieceCid, size: envelope.length, copies })
   print(`✓ Backed up session ${id}: ${session.files.length} files, ${envelope.length} bytes encrypted`)
   print(`  Piece ${pieceCid} in data set ${copies.map((copy) => copy.dataSetId).join(', ')}`)
-  if (
-    previous !== undefined &&
-    sameKeyholder(previous, login.keyholder) &&
-    previous.lastWriteAt <= header.lastWriteAt &&
-    previous.pieceCid !== pieceCid
-  ) {
-    await storage.remove(previous.copies)
-  }
+  if (obsolete.length > 0) await storage.remove(obsolete)
   return 0
 }
 
@@ -175,7 +170,6 @@ async function backupIdle(
     }
   }
   if (due.length === 0) {
-    print(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
     return counts.failed === 0 ? 0 : 1
   }
   const authorizedUntil = await storage.authorizedUntil().catch((error: unknown) => {
@@ -234,16 +228,9 @@ async function backupIdle(
       continue
     }
     try {
-      const previous = indexEntry(piece.header.sessionId)
-      recordEntry({ ...piece.header, ...login.keyholder, ...result.value, size: piece.envelope.length })
-      if (
-        previous !== undefined &&
-        sameKeyholder(previous, login.keyholder) &&
-        previous.lastWriteAt <= piece.header.lastWriteAt &&
-        previous.pieceCid !== result.value.pieceCid
-      ) {
-        obsolete.push(...previous.copies)
-      }
+      obsolete.push(
+        ...recordEntry({ ...piece.header, ...login.keyholder, ...result.value, size: piece.envelope.length })
+      )
       counts.backedUp++
       print(`✓ Backed up session ${piece.header.sessionId}: ${piece.envelope.length} bytes encrypted`)
     } catch (error) {
@@ -256,10 +243,8 @@ async function backupIdle(
       await storage.remove(obsolete)
     } catch (error) {
       print(`✗ Old pieces remain stored: ${error instanceof Error ? error.message : String(error)}`)
-      print(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
       return 1
     }
   }
-  print(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
   return counts.failed === 0 ? 0 : 1
 }

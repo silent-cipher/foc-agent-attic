@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { COMMITMENT_KEY, commitment, KEYSPACE_ID_KEY } from '@filoz/keysmith'
 import { paginate } from '@filoz/synapse-core'
 import { getAccountSummary, isFwssMaxApproved } from '@filoz/synapse-core/pay'
@@ -88,8 +89,7 @@ export const synapseStorage: Connect = (login, progress) => {
     for await (const dataSet of paginate(({ cursor }) => getPdpDataSets(synapse.client, { address: owner, cursor }))) {
       if (
         dataSet.live &&
-        Object.keys(dataSet.metadata).length === Object.keys(metadata).length &&
-        Object.entries(metadata).every(([key, value]) => dataSet.metadata[key] === value) &&
+        isDeepStrictEqual(dataSet.metadata, metadata) &&
         (known === undefined || dataSet.dataSetId < known)
       )
         known = dataSet.dataSetId
@@ -118,7 +118,7 @@ export const synapseStorage: Connect = (login, progress) => {
     const { synapse, contexts } = await getUploads()
     async function uploadBatch(batch: readonly Uint8Array[]): Promise<PromiseSettledResult<Stored>[]> {
       if (batch.length === 0) return []
-      const tasks: { index: number; result: Promise<Stored> }[] = []
+      const tasks: Promise<Stored>[] = []
       const queue = batch.entries()
       await Promise.all(
         Array.from({ length: 4 }, async () => {
@@ -155,7 +155,7 @@ export const synapseStorage: Connect = (login, progress) => {
               () => parked.resolve(),
               () => parked.resolve()
             )
-            tasks.push({ index, result })
+            tasks[index] = result
             await parked.promise
           }
         })
@@ -164,7 +164,7 @@ export const synapseStorage: Connect = (login, progress) => {
       await synapse.storage.flush().catch((error: unknown) => {
         progress(`Batch commit failed: ${error instanceof Error ? error.message : String(error)}`)
       })
-      return Promise.allSettled(tasks.sort((a, b) => a.index - b.index).map((task) => task.result))
+      return Promise.allSettled(tasks)
     }
     const results: PromiseSettledResult<Stored>[] = []
     let next = 0
