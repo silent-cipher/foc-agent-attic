@@ -15,7 +15,7 @@ import { synapseStorage } from './storage.ts'
 export type Result = { code: number; stderr: string }
 
 const USAGE =
-  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic backup --current | attic restore <session id> | attic sessions | attic refresh\n'
+  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic backup --current | attic restore <session id> | attic sessions [<words>] | attic refresh\n'
 
 /** Runs the Attic CLI with `args`, the arguments after the script path, writing its output to `write`. */
 export async function run(args: readonly string[], write: (text: string) => void): Promise<Result> {
@@ -33,9 +33,8 @@ export async function run(args: readonly string[], write: (text: string) => void
     let code: number
     if (name === 'setup') code = await setup({ ...options, ...grantOption(rest) }, print, synapseStorage)
     else if (name === 'sessions') {
-      // Refuses any argument.
-      parseArgs({ args: rest })
-      code = await sessions(options.network, print)
+      const { positionals } = parseArgs({ args: rest, allowPositionals: true })
+      code = await sessions(options.network, positionals, print)
     } else if (name === 'refresh') {
       parseArgs({ args: rest })
       const login = await openLogin(options.network)

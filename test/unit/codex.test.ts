@@ -27,6 +27,7 @@ test('reads only the requested rollout, byte for byte, with its project and last
     files: [{ path, bytes: readFileSync(target) }],
     project: '/tmp/attic-e2e',
     lastWriteAt: date,
+    about: {},
   })
   assert.equal(agent.resumeCommand(ID), `codex resume ${ID}`)
 })

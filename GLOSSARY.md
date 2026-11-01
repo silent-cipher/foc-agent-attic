@@ -28,7 +28,7 @@ One session's backup on Filecoin: a header and the session's files, encrypted as
 _Avoid_: Blob, archive, upload
 
 **Header**:
-The plaintext start of a piece that describes the session (ID, agent, project, machine, each file's size and hash). Readable without reading the rest of the piece.
+The plaintext start of a piece that describes the session (ID, agent, project, machine, what the session is about, each file's size and hash). Readable without reading the rest of the piece.
 _Avoid_: Manifest
 
 **Index**:

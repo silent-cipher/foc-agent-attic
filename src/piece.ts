@@ -15,6 +15,12 @@ export type Header = {
   project: string | null
   machine: string
   lastWriteAt: string
+  /** The latest title the agent gave the session. Added within format 1, so older pieces lack it. */
+  title?: string
+  /** The session's first prompt, shortened. Added within format 1. */
+  firstPrompt?: string
+  /** The git branch the session last ran on. Added within format 1. */
+  branch?: string
   files: FileEntry[]
 }
 
@@ -165,6 +171,9 @@ function isHeader(h: unknown): h is Header {
     typeof h.machine === 'string' &&
     'lastWriteAt' in h &&
     typeof h.lastWriteAt === 'string' &&
+    (!('title' in h) || typeof h.title === 'string') &&
+    (!('firstPrompt' in h) || typeof h.firstPrompt === 'string') &&
+    (!('branch' in h) || typeof h.branch === 'string') &&
     'files' in h &&
     Array.isArray(h.files) &&
     h.files.every(isFileEntry)

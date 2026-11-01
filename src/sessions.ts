@@ -6,19 +6,30 @@ const WARN_DAYS = 7
 
 /**
  * Lists the backed-up sessions in the index, newest first, then how the last run ended and whether the session
- * key expires soon. Reads only local files, so it works offline.
+ * key expires soon. With `words`, lists only the sessions whose title, first prompt, project or branch contain
+ * every word, ignoring case. Reads only local files, so it works offline.
  */
 export async function sessions(
   network: Network,
+  words: readonly string[],
   print: (line: string) => void,
   now = Math.floor(Date.now() / 1000)
 ): Promise<number> {
-  const entries = indexEntries().toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
-  if (entries.length === 0) {
+  const all = indexEntries()
+  const needles = words.map((word) => word.toLowerCase())
+  const entries = all
+    .filter((e) => {
+      const text = [e.title, e.firstPrompt, e.project, e.branch].join('\n').toLowerCase()
+      return needles.every((needle) => text.includes(needle))
+    })
+    .toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
+  if (all.length === 0) {
     print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
     print('Backed up on another machine? Run /attic:refresh to add it to the index.')
+  } else if (entries.length === 0) {
+    print(`No sessions in the Attic index match ${words.join(' ')}.`)
   } else {
-    const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size']
+    const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size', 'Title']
     const rows = [
       header,
       ...entries.map((e) => [
@@ -27,6 +38,7 @@ export async function sessions(
         e.project ?? '?',
         dateTime(e.lastWriteAt),
         `${(e.size / 1024).toFixed(1)} KiB`,
+        e.title ?? e.firstPrompt ?? '',
       ]),
     ]
     const widths = header.map((_, column) => Math.max(...rows.map((row) => row[column]?.length ?? 0)))

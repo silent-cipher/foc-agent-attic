@@ -35,9 +35,9 @@ function printed(): { lines: string[]; print: (line: string) => void } {
   return { lines, print: (line) => lines.push(line) }
 }
 
-async function listed(now = NOW): Promise<string[]> {
+async function listed(now = NOW, words: string[] = []): Promise<string[]> {
   const output = printed()
-  assert.equal(await sessions('calibration', output.print, now), 0)
+  assert.equal(await sessions('calibration', words, output.print, now), 0)
   return output.lines
 }
 
@@ -65,16 +65,42 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   assert.deepEqual({ ...indexEntry(ID), copies: [] }, { ...newest, copies: [] })
 
   const [header, ...rows] = await listed()
-  assert.match(header ?? '', /^Session ID +Agent +Project +Last write \(UTC\) +Size$/)
+  assert.match(header ?? '', /^Session ID +Agent +Project +Last write \(UTC\) +Size +Title$/)
   assert.match(
     rows[0] ?? '',
-    new RegExp(`^${ID}  claude-code  /tmp/attic-e2e  \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d  \\d+\\.\\d KiB$`)
+    new RegExp(`^${ID}  claude-code  /tmp/attic-e2e  \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d  \\d+\\.\\d KiB  hello$`)
   )
   assert.match(rows[1] ?? '', new RegExp(`^${OTHER} `))
 
   assert.equal(await restore(options(fresh), ID, printed().print, storage.connect), 0)
   const restored = join(fresh.claude, 'projects', '-tmp-attic-e2e', `${ID}.jsonl`)
   assert.equal(readFileSync(restored, 'utf8'), readFileSync(transcript, 'utf8'))
+})
+
+test('sessions shows what each backed-up session is about after a refresh, and filters by its title', async () => {
+  const storage = memoryStorage()
+  const home = await machine()
+  writeClaudeSession(home, ID, 'Speed up the Index')
+  writeClaudeSession(home, OTHER)
+  await backup(options(home), ID, printed().print, storage.connect)
+  await backup(options(home), OTHER, printed().print, storage.connect)
+
+  assert.equal(await setup(options(await machine()), printed().print, storage.connect), 0)
+  const rows = (await listed()).filter((line) => line.startsWith(ID) || line.startsWith(OTHER))
+  assert.equal(rows.length, 2)
+  assert.ok(
+    rows.some((row) => row.startsWith(ID) && row.endsWith('  Speed up the Index')),
+    rows.join('\n')
+  )
+  assert.ok(
+    rows.some((row) => row.startsWith(OTHER) && row.endsWith('  hello')),
+    rows.join('\n')
+  )
+
+  const [header, ...matched] = await listed(NOW, ['speed'])
+  assert.match(header ?? '', /^Session ID /)
+  assert.match(matched[0] ?? '', new RegExp(`^${ID} `))
+  assert.doesNotMatch(matched.join('\n'), new RegExp(OTHER))
 })
 
 test('the rebuild reads only the start of each piece', async () => {

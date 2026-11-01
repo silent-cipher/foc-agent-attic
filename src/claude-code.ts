@@ -42,22 +42,61 @@ function readClaudeSession(home: string, id: string): AgentSession | undefined {
   const lastWrite = Math.max(...paths.map((path) => statSync(path).mtimeMs))
   return {
     files: files.toSorted(byPath),
-    project: projectOf(new TextDecoder().decode(files[0]?.bytes)),
+    ...describe(new TextDecoder().decode(files[0]?.bytes)),
     lastWriteAt: new Date(lastWrite),
   }
 }
 
 const byPath = (a: SessionFile, b: SessionFile) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
 
-// The folder name encodes the path lossily (every / and . becomes -), so it is read from the transcript.
-function projectOf(transcript: string): string | null {
+const PROMPT_LENGTH = 80
+
+// The folder name encodes the project path lossily (every / and . becomes -), so it is read from the transcript.
+function describe(transcript: string): Pick<AgentSession, 'project' | 'about'> {
+  let project: string | null = null
+  const about: AgentSession['about'] = {}
   for (const line of transcript.split('\n')) {
+    let entry: unknown
     try {
-      const { cwd } = JSON.parse(line)
-      if (typeof cwd === 'string') return cwd
+      entry = JSON.parse(line)
     } catch {
-      // A line cut short by a crash; the rest may still name the folder.
+      // A line cut short by a crash; the rest may still say.
+      continue
+    }
+    if (typeof entry !== 'object' || entry === null) continue
+    if (project === null && 'cwd' in entry && typeof entry.cwd === 'string') project = entry.cwd
+    if ('gitBranch' in entry && typeof entry.gitBranch === 'string' && entry.gitBranch !== '') {
+      about.branch = entry.gitBranch
+    }
+    if ('type' in entry && entry.type === 'ai-title' && 'aiTitle' in entry && typeof entry.aiTitle === 'string') {
+      about.title = entry.aiTitle
+    }
+    if (about.firstPrompt === undefined) {
+      const prompt = promptOf(entry)
+      if (prompt !== undefined) about.firstPrompt = prompt
     }
   }
-  return null
+  return { project, about }
+}
+
+// Slash commands, shell input and Claude Code's own notes come wrapped in <tags>, and the skill text and
+// summaries it injects are flagged; neither says what the session is about.
+function promptOf(entry: object): string | undefined {
+  if (!('type' in entry) || entry.type !== 'user' || ('isMeta' in entry && entry.isMeta === true)) return undefined
+  if ('isCompactSummary' in entry && entry.isCompactSummary === true) return undefined
+  if (!('message' in entry) || typeof entry.message !== 'object' || entry.message === null) return undefined
+  const content = 'content' in entry.message ? entry.message.content : undefined
+  const blocks: unknown[] =
+    typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : []
+  const text = blocks
+    .map((block) =>
+      typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block
+        ? String(block.text)
+        : ''
+    )
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (text === '' || text.startsWith('<')) return undefined
+  return text.length > PROMPT_LENGTH ? `${text.slice(0, PROMPT_LENGTH - 1)}…` : text
 }

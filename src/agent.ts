@@ -17,4 +17,6 @@ export type AgentSession = {
   /** The folder the session ran in, or null when its files never say. */
   project: string | null
   lastWriteAt: Date
+  /** What the session is about, as far as its files say. */
+  about: Pick<Header, 'title' | 'firstPrompt' | 'branch'>
 }

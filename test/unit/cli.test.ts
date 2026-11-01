@@ -29,10 +29,11 @@ test('backup and restore take exactly one session ID that cannot leave the proje
   }
 })
 
-test('sessions and refresh take no arguments', async () => {
-  for (const command of ['sessions', 'refresh']) {
-    const result = await run([command, 'extra'], () => undefined)
-    assert.equal(result.code, 1)
-    assert.match(result.stderr, /Unexpected argument 'extra'/)
-  }
+test('refresh takes no arguments and sessions no options', async () => {
+  const refresh = await run(['refresh', 'extra'], () => undefined)
+  assert.equal(refresh.code, 1)
+  assert.match(refresh.stderr, /Unexpected argument 'extra'/)
+  const sessions = await run(['sessions', '--extra'], () => undefined)
+  assert.equal(sessions.code, 1)
+  assert.match(sessions.stderr, /Unknown option '--extra'/)
 })
