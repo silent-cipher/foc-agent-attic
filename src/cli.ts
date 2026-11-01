@@ -4,10 +4,10 @@ import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
 import { claudeCode, claudeHome } from './claude-code.ts'
 import { codex, codexHome } from './codex.ts'
-import { refreshIndex } from './local-index.ts'
+import { indexEntries, refreshIndex } from './local-index.ts'
 import { openLogin } from './login.ts'
 import { restore } from './restore.ts'
-import { sessions } from './sessions.ts'
+import { matchingSessions, sessions } from './sessions.ts'
 import { setup } from './setup.ts'
 import { synapseStorage } from './storage.ts'
 
@@ -38,7 +38,21 @@ export async function run(args: readonly string[], write: (text: string) => void
         allowPositionals: true,
         options: { json: { type: 'boolean' } },
       })
-      code = await sessions(options.network, positionals, print, { json: values.json ?? false })
+      if (values.json) {
+        const found = matchingSessions(indexEntries(), positionals)
+        // Only what an agent needs to pick a session: file lists would overflow its tool output.
+        const picked = found.map(({ sessionId, agent, title, firstPrompt, project, branch, lastWriteAt }) => ({
+          sessionId,
+          agent,
+          title,
+          firstPrompt,
+          project,
+          branch,
+          lastWriteAt,
+        }))
+        print(JSON.stringify(picked))
+        code = 0
+      } else code = await sessions(options.network, positionals, print)
     } else if (name === 'refresh') {
       parseArgs({ args: rest })
       const login = await openLogin(options.network)

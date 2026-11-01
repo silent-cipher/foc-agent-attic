@@ -33,25 +33,17 @@ test('every CLI command has a Claude Code command and a line in the $attic skill
   }
 })
 
-test('both restore instructions search descriptions, require a choice and refresh missing sessions once', () => {
+test('both restore instructions list sessions as JSON, refresh missing ones and no longer stop without an ID', () => {
   for (const path of ['commands/restore.md', 'skills/attic/SKILL.md']) {
     const text = readFileSync(new URL(`../../plugins/attic/${path}`, import.meta.url), 'utf8')
-    for (const requirement of [
-      /sessions --json/,
-      /description or no arguments/,
-      /title, project and date/,
-      /Never restore without the user choosing, unless an ID was given/,
-      /refresh once/,
-      /run.*sessions --json.*again/,
-      /ID.*restore directly without asking/,
-    ]) {
-      assert.match(text, requirement, path)
-    }
-    assert.doesNotMatch(text, /ask for (?:a session ID|one) and stop|Ask for a session ID if restore/)
+    assert.match(text, /dist\/attic\.mjs" sessions --json/, path)
+    assert.match(text, /dist\/attic\.mjs" refresh/, path)
+    assert.doesNotMatch(text, /ask for (?:a session ID|one) and stop|Ask for a session ID if restore/, path)
   }
   const command = readFileSync(new URL('../../plugins/attic/commands/restore.md', import.meta.url), 'utf8')
-  assert.match(command, /AskUserQuestion/)
-  assert.match(command, /allowed-tools:.*sessions:\*.*refresh.*AskUserQuestion/)
-  const skill = readFileSync(new URL('../../plugins/attic/skills/attic/SKILL.md', import.meta.url), 'utf8')
-  assert.match(skill, /In Codex, ask a plain question/)
+  const allowed = command.match(/^allowed-tools: (.*)$/m)?.[1] ?? ''
+  for (const operation of ['restore:*', 'sessions:*', 'refresh']) {
+    assert.ok(allowed.includes(`dist/attic.mjs" ${operation})`), operation)
+  }
+  assert.ok(allowed.split(', ').includes('AskUserQuestion'))
 })

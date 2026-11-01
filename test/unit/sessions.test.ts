@@ -37,7 +37,7 @@ function printed(): { lines: string[]; print: (line: string) => void } {
 
 async function listed(now = NOW, words: string[] = []): Promise<string[]> {
   const output = printed()
-  assert.equal(await sessions('calibration', words, output.print, { now }), 0)
+  assert.equal(await sessions('calibration', words, output.print, now), 0)
   return output.lines
 }
 

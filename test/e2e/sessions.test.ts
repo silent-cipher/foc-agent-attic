@@ -44,7 +44,7 @@ function writeIndex(home: Home, entries: ReturnType<typeof entry>[]): void {
   writeFileSync(join(home.root, '.attic', 'index.json'), JSON.stringify({ sessions }))
 }
 
-test('sessions --json prints only newest-first entries, offline, with optional word filters', async () => {
+test('sessions --json prints only what identifies each session, newest first, offline, with word filters', async () => {
   const home = await tempHome()
   const older = entry(ID, '/tmp/old', '2026-10-01T08:00:00.000Z', 2048)
   const newer = {
@@ -65,8 +65,23 @@ test('sessions --json prints only newest-first entries, offline, with optional w
   writeIndex(home, [older, newer])
   // Neither a login nor a readable backup status is needed to search the index.
   writeFileSync(join(home.root, '.attic', 'status.json'), '{"ok":"invalid"}')
-  assert.deepEqual(listing(), [newer, older])
-  assert.deepEqual(listing(['FUNDING', 'balance', '/tmp/new']), [newer])
+  const newerListed = {
+    sessionId: OTHER,
+    agent: 'codex',
+    title: 'Check funding',
+    firstPrompt: 'Why did the deposit fail?\nCheck the balance.',
+    project: '/tmp/new',
+    branch: 'fix/funding',
+    lastWriteAt: '2026-10-28T09:12:00.000Z',
+  }
+  const olderListed = {
+    sessionId: ID,
+    agent: 'claude-code',
+    project: '/tmp/old',
+    lastWriteAt: '2026-10-01T08:00:00.000Z',
+  }
+  assert.deepEqual(listing(), [newerListed, olderListed])
+  assert.deepEqual(listing(['FUNDING', 'balance', '/tmp/new']), [newerListed])
   assert.deepEqual(listing(['missing']), [])
 })
 

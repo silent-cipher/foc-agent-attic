@@ -1,5 +1,5 @@
 import { lastRun } from './last-run.ts'
-import { indexEntries } from './local-index.ts'
+import { type IndexEntry, indexEntries } from './local-index.ts'
 import { type Network, openLogin } from './login.ts'
 
 const WARN_DAYS = 7
@@ -7,27 +7,16 @@ const WARN_DAYS = 7
 /**
  * Lists the backed-up sessions in the index, newest first, then how the last run ended and whether the session
  * key expires soon. With `words`, lists only the sessions whose title, first prompt, project or branch contain
- * every word, ignoring case. With `json`, prints only the entries as JSON, without status or login checks.
- * Reads only local files, so it works offline.
+ * every word, ignoring case. Reads only local files, so it works offline.
  */
 export async function sessions(
   network: Network,
   words: readonly string[],
   print: (line: string) => void,
-  { json = false, now = Math.floor(Date.now() / 1000) }: { json?: boolean; now?: number } = {}
+  now = Math.floor(Date.now() / 1000)
 ): Promise<number> {
   const all = indexEntries()
-  const needles = words.map((word) => word.toLowerCase())
-  const entries = all
-    .filter((e) => {
-      const text = [e.title, e.firstPrompt, e.project, e.branch].join('\n').toLowerCase()
-      return needles.every((needle) => text.includes(needle))
-    })
-    .toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
-  if (json) {
-    print(JSON.stringify(entries))
-    return 0
-  }
+  const entries = matchingSessions(all, words)
   if (all.length === 0) {
     print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
     print('Backed up on another machine? Run /attic:refresh to add it to the index.')
@@ -80,6 +69,17 @@ export async function sessions(
     print(`⚠ The session key expires on ${date} (in ${days} days). Run /attic:setup to renew it.`)
   }
   return 0
+}
+
+/** The entries whose title, first prompt, project or branch contain every word, ignoring case, newest first. */
+export function matchingSessions(entries: readonly IndexEntry[], words: readonly string[]): IndexEntry[] {
+  const needles = words.map((word) => word.toLowerCase())
+  return entries
+    .filter((e) => {
+      const text = [e.title, e.firstPrompt, e.project, e.branch].join('\n').toLowerCase()
+      return needles.every((needle) => text.includes(needle))
+    })
+    .toSorted((a, b) => b.lastWriteAt.localeCompare(a.lastWriteAt))
 }
 
 const dateTime = (iso: string) => iso.slice(0, 16).replace('T', ' ')
