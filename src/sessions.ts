@@ -29,7 +29,7 @@ export async function sessions(
   } else if (entries.length === 0) {
     print(`No sessions in the Attic index match ${words.join(' ')}.`)
   } else {
-    const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size', 'Title']
+    const header = ['Session ID', 'Agent', 'Project', 'Last write (UTC)', 'Size', 'Branch', 'Title']
     const rows = [
       header,
       ...entries.map((e) => [
@@ -38,6 +38,7 @@ export async function sessions(
         e.project ?? '?',
         dateTime(e.lastWriteAt),
         `${(e.size / 1024).toFixed(1)} KiB`,
+        e.branch ?? '',
         e.title ?? e.firstPrompt ?? '',
       ]),
     ]

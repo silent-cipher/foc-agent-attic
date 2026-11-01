@@ -65,10 +65,10 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   assert.deepEqual({ ...indexEntry(ID), copies: [] }, { ...newest, copies: [] })
 
   const [header, ...rows] = await listed()
-  assert.match(header ?? '', /^Session ID +Agent +Project +Last write \(UTC\) +Size +Title$/)
+  assert.match(header ?? '', /^Session ID +Agent +Project +Last write \(UTC\) +Size +Branch +Title$/)
   assert.match(
     rows[0] ?? '',
-    new RegExp(`^${ID}  claude-code  /tmp/attic-e2e  \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d  \\d+\\.\\d KiB  hello$`)
+    new RegExp(`^${ID}  claude-code  /tmp/attic-e2e  \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d  \\d+\\.\\d KiB  main +hello$`)
   )
   assert.match(rows[1] ?? '', new RegExp(`^${OTHER} `))
 
