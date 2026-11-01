@@ -59,6 +59,8 @@ The calibnet suite backs up a session, deletes it, restores it, and checks Claud
 
 The same backup, sessions and restore operations also handle Codex rollouts under `~/.codex/sessions` (or `$CODEX_HOME/sessions`). Attic saves the rollout JSONL byte for byte, including an active rollout's incomplete last line, and restores it to the same relative path under the destination Codex home. It reads the project from the initial `session_meta.payload.cwd` and prints `codex resume <id>` after restore. Global history, credentials, config, SQLite databases and archived sessions are not included; each subagent rollout is its own session ID.
 
+Codex sessions show their latest `thread_name` from `session_index.jsonl`, else their first `user_message` event, shortened. The branch comes from `session_meta.payload.git.branch`. These fields are saved in the encrypted header and searchable with `sessions <words>`. A missing or unreadable title index leaves the title out; the index itself is never backed up. Renaming an unchanged rollout does not upload it again: the title updates when the rollout next changes and is backed up.
+
 Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic refresh`, `$attic restore <session id>` or `$attic version`. The CLI's `/attic:…` hints refer to the equivalent Claude Code commands.
 
 For local development, run `pnpm install` and `pnpm build` first. Add the checkout as a local marketplace:

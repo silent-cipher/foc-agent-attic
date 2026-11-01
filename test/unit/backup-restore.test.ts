@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseUnits } from 'viem'
@@ -7,6 +7,8 @@ import { type BackupOptions, backup } from '../../src/backup.ts'
 import { claudeCode } from '../../src/claude-code.ts'
 import { codex } from '../../src/codex.ts'
 import { indexEntry, recordEntry } from '../../src/local-index.ts'
+import { openLogin } from '../../src/login.ts'
+import { openPiece } from '../../src/piece.ts'
 import { restore } from '../../src/restore.ts'
 import { sessions } from '../../src/sessions.ts'
 import { setup } from '../../src/setup.ts'
@@ -193,4 +195,45 @@ test('restore refuses a Codex piece indexed as Claude Code and writes nothing', 
   recordEntry({ ...entry, agent: 'claude-code' })
   await assert.rejects(restore(options(home), ID, printed().print, storage.connect), /holds a codex session/)
   assert.equal(existsSync(home.claude), false)
+})
+
+test('Codex renames wait for changed rollout bytes and unreadable titles do not fail backup', async () => {
+  const home = await loggedInHome()
+  const storage = memoryStorage()
+  const [path] = writeCodexSession(home, ID)
+  assert.ok(path)
+  const index = join(home.codex, 'session_index.jsonl')
+  writeFileSync(index, JSON.stringify({ id: ID, thread_name: 'Original title' }))
+  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal(indexEntry(ID)?.title, 'Original title')
+
+  writeFileSync(index, JSON.stringify({ id: ID, thread_name: 'Renamed title' }))
+  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal(storage.state.pieces.size, 1)
+  assert.equal(indexEntry(ID)?.title, 'Original title')
+
+  appendFileSync(
+    join(home.codex, path),
+    '{"type":"event_msg","payload":{"type":"user_message","message":"Fix search"}}\n'
+  )
+  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal(storage.state.pieces.size, 2)
+  assert.equal(indexEntry(ID)?.title, 'Renamed title')
+  const login = await openLogin('calibration')
+  const envelope = [...storage.state.pieces.values()][1]
+  assert.ok(envelope)
+  const { header } = await openPiece(login.grant, envelope)
+  assert.equal(header.title, 'Renamed title')
+  assert.equal(header.firstPrompt, 'Fix search')
+  assert.equal('branch' in header, false)
+  assert.deepEqual(
+    header.files.map((file) => file.path),
+    [path]
+  )
+
+  rmSync(index)
+  mkdirSync(index)
+  appendFileSync(join(home.codex, path), '{}\n')
+  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal('title' in (indexEntry(ID) ?? {}), false)
 })

@@ -3,8 +3,11 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { privateKeyToAccount } from 'viem/accounts'
+import { backup } from '../../src/backup.ts'
+import { codex } from '../../src/codex.ts'
 import { GROUP_KEY, OWNER_KEY } from '../make-grant.ts'
-import { type Home, logIn, runAttic, tempHome, writeClaudeSession } from './helpers.ts'
+import { memoryStorage } from '../memory-storage.ts'
+import { type Home, logIn, runAttic, tempHome, writeClaudeSession, writeCodexSession } from './helpers.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
 const OTHER = '7a2b4c6d-8e9f-4a1b-9c2d-3e4f5a6b7c8d'
@@ -111,4 +114,52 @@ test('a status file that is not a run status is refused, not shown', async () =>
   const result = runAttic(home, ['sessions'])
   assert.equal(result.status, 1)
   assert.match(result.stderr, /status\.json is not an Attic run status\. Fix it, or delete it\./)
+})
+
+test('a Codex backup appears in sessions and matches its title, prompt and branch', async () => {
+  const home = await tempHome()
+  await logIn(home)
+  const [path] = writeCodexSession(home, ID)
+  assert.ok(path)
+  const rollout = join(home.codex, path)
+  writeFileSync(
+    rollout,
+    [
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: ID, cwd: '/tmp/attic-e2e', git: { branch: 'feat/index' } },
+      }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'Fix slow lookup' } }),
+      '',
+    ].join('\n')
+  )
+  writeFileSync(join(home.codex, 'session_index.jsonl'), JSON.stringify({ id: ID, thread_name: 'Speed up search' }))
+  const previousHome = process.env.HOME
+  try {
+    process.env.HOME = home.root
+    assert.equal(
+      await backup(
+        {
+          network: 'calibration',
+          consoleUrl: 'https://pay.filecoin.cloud',
+          agents: [codex(home.codex)],
+        },
+        ID,
+        () => undefined,
+        memoryStorage().connect
+      ),
+      0
+    )
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME
+    else process.env.HOME = previousHome
+  }
+  for (const words of [[], ['SEARCH'], ['slow'], ['feat/index'], ['search', 'slow', 'feat/index']]) {
+    const result = runAttic(home, ['sessions', ...words], CALIBRATION)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, new RegExp(`${ID} +codex +/tmp/attic-e2e .* Speed up search\\n`))
+  }
+  const none = runAttic(home, ['sessions', 'missing'], CALIBRATION)
+  assert.equal(none.status, 0, none.stderr)
+  assert.match(none.stdout, /^No sessions in the Attic index match missing\./)
 })

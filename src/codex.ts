@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
-import type { Agent } from './agent.ts'
+import type { Agent, AgentSession } from './agent.ts'
 
 /** Codex's home folder, which holds `sessions/`. */
 export function codexHome(env: NodeJS.ProcessEnv): string {
@@ -52,12 +52,87 @@ export function codex(home: string): Agent {
         throw new Error(`Codex rollout ${path} has invalid session metadata.`)
       }
       if (meta.payload.id !== id) return undefined
+      const about: AgentSession['about'] = {}
+      const title = threadName(home, id)
+      if (title !== undefined) about.title = title
+      const prompt = firstPrompt(bytes.toString('utf8'))
+      if (prompt !== undefined) about.firstPrompt = prompt
+      const git = 'git' in meta.payload ? meta.payload.git : undefined
+      if (
+        typeof git === 'object' &&
+        git !== null &&
+        'branch' in git &&
+        typeof git.branch === 'string' &&
+        git.branch !== ''
+      ) {
+        about.branch = git.branch
+      }
       return {
         files: [{ path: relative(home, path), bytes }],
         project: 'cwd' in meta.payload && typeof meta.payload.cwd === 'string' ? meta.payload.cwd : null,
         lastWriteAt: statSync(path).mtime,
-        about: {},
+        about,
       }
     },
   }
+}
+
+function threadName(home: string, id: string): string | undefined {
+  let index: string
+  try {
+    index = readFileSync(join(home, 'session_index.jsonl'), 'utf8')
+  } catch {
+    // The optional title index must never prevent a rollout backup.
+    return undefined
+  }
+  let title: string | undefined
+  for (const line of index.split('\n')) {
+    let entry: unknown
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      'id' in entry &&
+      entry.id === id &&
+      'thread_name' in entry &&
+      typeof entry.thread_name === 'string'
+    ) {
+      title = entry.thread_name || undefined
+    }
+  }
+  return title
+}
+
+const PROMPT_LENGTH = 80
+
+function firstPrompt(rollout: string): string | undefined {
+  for (const line of rollout.split('\n')) {
+    let entry: unknown
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      !('type' in entry) ||
+      entry.type !== 'event_msg' ||
+      !('payload' in entry) ||
+      typeof entry.payload !== 'object' ||
+      entry.payload === null ||
+      !('type' in entry.payload) ||
+      entry.payload.type !== 'user_message' ||
+      !('message' in entry.payload) ||
+      typeof entry.payload.message !== 'string'
+    )
+      continue
+    const text = entry.payload.message.replace(/\s+/g, ' ').trim()
+    return text === '' ? undefined : text.length > PROMPT_LENGTH ? `${text.slice(0, PROMPT_LENGTH - 1)}…` : text
+  }
+  return undefined
 }
