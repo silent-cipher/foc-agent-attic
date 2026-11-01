@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, renameSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -54,7 +54,75 @@ test('a missing project is null and malformed or mismatched metadata is refused'
   const target = join(home.codex, path)
   writeFileSync(target, JSON.stringify({ type: 'session_meta', payload: { id: ID } }))
   assert.equal(codex(home.codex).readSession(ID)?.project, null)
+  assert.deepEqual(codex(home.codex).readSession(ID)?.about, {})
   assert.equal(codex(home.codex).readSession(ID.slice(-12)), undefined)
   writeFileSync(target, '{"cut short')
   assert.throws(() => codex(home.codex).readSession(ID), /metadata/)
+})
+
+test('reads the latest matching thread name, first user event and metadata branch', async () => {
+  const home = await tempHome()
+  const [path] = writeCodexSession(home, ID)
+  assert.ok(path)
+  const target = join(home.codex, path)
+  const meta = { type: 'session_meta', payload: { id: ID, git: { branch: 'feat/search' } } }
+  const prompt = `  Fix\n the ${'slow '.repeat(20)}search  `
+  writeFileSync(
+    target,
+    [
+      JSON.stringify(meta),
+      '{"cut short',
+      'null',
+      JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'user', content: 'ignore' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 42 } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: prompt } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'Later prompt' } }),
+      '{"unfinished',
+    ].join('\n')
+  )
+  writeFileSync(
+    join(home.codex, 'session_index.jsonl'),
+    [
+      JSON.stringify({ id: ID, thread_name: 'Old title' }),
+      '{"broken',
+      'null',
+      JSON.stringify({ id: ID, thread_name: 'Search faster' }),
+      JSON.stringify({ id: 'other', thread_name: 'Another session' }),
+      JSON.stringify({ id: ID, thread_name: 42 }),
+    ].join('\n')
+  )
+  const session = codex(home.codex).readSession(ID)
+  assert.deepEqual(session?.about, {
+    title: 'Search faster',
+    firstPrompt: `${prompt.replace(/\s+/g, ' ').trim().slice(0, 79)}…`,
+    branch: 'feat/search',
+  })
+  assert.deepEqual(session?.files, [{ path, bytes: readFileSync(target) }])
+})
+
+test('missing or unreadable title indexes do not prevent reading a rollout', async () => {
+  const home = await tempHome()
+  writeCodexSession(home, ID)
+  assert.deepEqual(codex(home.codex).readSession(ID)?.about, {})
+  mkdirSync(join(home.codex, 'session_index.jsonl'))
+  assert.deepEqual(codex(home.codex).readSession(ID)?.about, {})
+})
+
+test('omits empty or invalid fields and keeps a short first prompt intact', async () => {
+  const home = await tempHome()
+  const [path] = writeCodexSession(home, ID)
+  assert.ok(path)
+  for (const branch of ['', 42, null]) {
+    writeFileSync(
+      join(home.codex, path),
+      JSON.stringify({ type: 'session_meta', payload: { id: ID, git: { branch } } })
+    )
+    writeFileSync(join(home.codex, 'session_index.jsonl'), JSON.stringify({ id: 'other', thread_name: 'Other' }))
+    assert.deepEqual(codex(home.codex).readSession(ID)?.about, {})
+  }
+  appendFileSync(
+    join(home.codex, path),
+    '\n{"type":"event_msg","payload":{"type":"user_message","message":"  Fix\\n search  "}}\n'
+  )
+  assert.deepEqual(codex(home.codex).readSession(ID)?.about, { firstPrompt: 'Fix search' })
 })
