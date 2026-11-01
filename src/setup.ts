@@ -2,14 +2,14 @@ import { publicKeyOf } from '@filoz/keysmith'
 import type { Address, Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { checkFunding, fundingUrl } from './funding.ts'
-import { hasIndex, rebuildIndex } from './local-index.ts'
+import { hasIndex, refreshIndex } from './local-index.ts'
 import { logIn, type Network } from './login.ts'
 import type { Account, Connect } from './storage.ts'
 
 export type SetupOptions = { network: Network; consoleUrl: string; grant?: string }
 
 /**
- * Logs this machine in through the Filecoin Cloud console, reports whether backups can run, and rebuilds the
+ * Logs this machine in through the Filecoin Cloud console, reports whether backups can run, and builds the
  * index from the chain when this machine has none.
  * Each run does what is still missing, so it is safe to repeat.
  *
@@ -41,7 +41,7 @@ export async function setup(options: SetupOptions, print: (line: string) => void
     print
   )
   // Reading pieces needs only the Grant, so a new machine can list and restore before the key is authorized.
-  if (!hasIndex()) await rebuildIndex(login, storage, print)
+  if (!hasIndex()) await refreshIndex(login, storage, print)
   return code
 }
 

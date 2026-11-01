@@ -19,7 +19,11 @@ export async function restore(
   connect: Connect
 ): Promise<number> {
   const entry = indexEntry(id)
-  if (entry === undefined) throw new Error(`Session ${id} is not in the Attic index, so it has no backup here.`)
+  if (entry === undefined) {
+    throw new Error(
+      `Session ${id} is not in the Attic index. If another machine backed it up, run /attic:refresh, then restore again. Nothing was written.`
+    )
+  }
   const agent = options.agents.find((candidate) => candidate.name === entry.agent)
   if (agent === undefined) throw new Error(`Session ${id} is a ${entry.agent} session; update Attic to restore it.`)
   const login = await openLogin(options.network)

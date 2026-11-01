@@ -115,12 +115,27 @@ test('restore refuses a backup that this login cannot decrypt, before downloadin
   }
 })
 
-test('restore of a session with no backup writes nothing', async () => {
+test('restore of a session missing from the index suggests refresh and writes nothing', async () => {
   const home = await tempHome()
-  const result = runAttic(home, ['restore', ID])
+  await logIn(home)
+  const result = runAttic(home, ['restore', ID], CALIBRATION)
   assert.equal(result.status, 1)
-  assert.match(result.stderr, new RegExp(`^Error: Session ${ID} is not in the Attic index`))
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^Error: Session ${ID} is not in the Attic index\\. If another machine backed it up, run /attic:refresh, then restore again\\. Nothing was written\\.`
+    )
+  )
+  assert.equal(result.stdout, '')
   assert.throws(() => statSync(home.claude))
+})
+
+test('refresh before setup says to run setup', async () => {
+  const home = await tempHome()
+  const result = runAttic(home, ['refresh'])
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
+  assert.equal(result.stdout, '')
 })
 
 test('restore before setup says to run setup', async () => {

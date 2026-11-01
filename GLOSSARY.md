@@ -32,8 +32,12 @@ The plaintext start of a piece that describes the session (ID, agent, project, m
 _Avoid_: Manifest
 
 **Index**:
-This machine's record of the newest piece of each session. A cache: it can be rebuilt from the pieces on chain.
+This machine's record of the newest piece of each session. A cache: a refresh from an empty index recreates it from the pieces on chain.
 _Avoid_: Manifest, catalog, database
+
+**Refresh**:
+Reading the pieces on chain that the index doesn't hold yet into the index, so sessions other machines backed up can be listed and restored here. Never uploads.
+_Avoid_: Sync, rebuild
 
 **Pending removal**:
 An older piece of a session whose newer piece has committed, waiting to be removed from its data set.

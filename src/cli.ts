@@ -4,6 +4,8 @@ import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
 import { claudeCode, claudeHome } from './claude-code.ts'
 import { codex, codexHome } from './codex.ts'
+import { refreshIndex } from './local-index.ts'
+import { openLogin } from './login.ts'
 import { restore } from './restore.ts'
 import { sessions } from './sessions.ts'
 import { setup } from './setup.ts'
@@ -13,7 +15,7 @@ import { synapseStorage } from './storage.ts'
 export type Result = { code: number; stderr: string }
 
 const USAGE =
-  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic backup --current | attic restore <session id> | attic sessions\n'
+  'Usage: attic --version | attic setup [--grant <fgr1_…>] | attic backup <session id> | attic backup --current | attic restore <session id> | attic sessions | attic refresh\n'
 
 /** Runs the Attic CLI with `args`, the arguments after the script path, writing its output to `write`. */
 export async function run(args: readonly string[], write: (text: string) => void): Promise<Result> {
@@ -22,7 +24,7 @@ export async function run(args: readonly string[], write: (text: string) => void
     return { code: 0, stderr: '' }
   }
   const [name, ...rest] = args
-  if (name !== 'setup' && name !== 'backup' && name !== 'restore' && name !== 'sessions') {
+  if (name !== 'setup' && name !== 'backup' && name !== 'restore' && name !== 'sessions' && name !== 'refresh') {
     return { code: 1, stderr: USAGE }
   }
   const print = (line: string) => write(`${line}\n`)
@@ -34,6 +36,11 @@ export async function run(args: readonly string[], write: (text: string) => void
       // Refuses any argument.
       parseArgs({ args: rest })
       code = await sessions(options.network, print)
+    } else if (name === 'refresh') {
+      parseArgs({ args: rest })
+      const login = await openLogin(options.network)
+      await refreshIndex(login, synapseStorage(login, print), print)
+      code = 0
     } else if (name === 'backup') {
       const { values, positionals } = parseArgs({
         args: rest,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import codexMarketplace from '../../.agents/plugins/marketplace.json' with { type: 'json' }
 import claudeMarketplace from '../../.claude-plugin/marketplace.json' with { type: 'json' }
@@ -22,4 +22,13 @@ test('both agents discover the same plugin and its manifests agree', () => {
   assert.equal(codex?.source.path, claude?.source)
   assert.ok(existsSync(new URL(`../../${codex?.source.path}/plugin.json`, import.meta.url)))
   assert.ok(existsSync(new URL('../../plugins/attic/skills/attic/SKILL.md', import.meta.url)))
+})
+
+test('every CLI command has a Claude Code command and a line in the $attic skill', () => {
+  const read = (path: string) => readFileSync(new URL(`../../plugins/attic/${path}`, import.meta.url), 'utf8')
+  const skill = read('skills/attic/SKILL.md')
+  for (const name of ['setup', 'backup', 'restore', 'sessions', 'refresh']) {
+    assert.ok(read(`commands/${name}.md`).includes(`dist/attic.mjs" ${name}`), name)
+    assert.ok(skill.includes(`dist/attic.mjs" ${name}`), name)
+  }
 })

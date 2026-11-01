@@ -60,7 +60,7 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   const fresh = await machine()
   const output = printed()
   assert.equal(await setup(options(fresh), output.print, storage.connect), 0)
-  assert.ok(output.lines.includes('✓ Index rebuilt: 2 sessions'), output.lines.join('\n'))
+  assert.ok(output.lines.includes('✓ Index refreshed: 2 new sessions, 0 updated'), output.lines.join('\n'))
   // The fake numbers piece IDs by listing order, which the test changed.
   assert.deepEqual({ ...indexEntry(ID), copies: [] }, { ...newest, copies: [] })
 
@@ -118,7 +118,7 @@ test('setup leaves an existing index alone', async () => {
 
   const output = printed()
   await setup(options(home), output.print, storage.connect)
-  assert.ok(!output.lines.some((line) => line.includes('Index rebuilt')), output.lines.join('\n'))
+  assert.ok(!output.lines.some((line) => line.includes('Found')), output.lines.join('\n'))
   assert.ok(indexEntry(ID))
 })
 
