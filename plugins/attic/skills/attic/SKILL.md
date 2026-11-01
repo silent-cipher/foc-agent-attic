@@ -32,4 +32,4 @@ After restore, show the resume command exactly as printed (`codex resume <id>` o
 
 The CLI's `/attic:setup` and other `/attic:…` hints name Claude Code commands. In Codex, offer the corresponding operation through this skill, such as `$attic setup`, `$attic backup <id>` or `$attic refresh`.
 
-Never print `~/.attic/session.env` or ask for the wallet's private key. If the CLI bundle is missing, report that the plugin needs `pnpm install` and `pnpm build` in its source checkout before installation; don't download or execute a substitute.
+Never print `~/.attic/session.env` or ask for the wallet's private key. If the CLI bundle is missing, report that the plugin was installed without it: install a release (the marketplace's `release` ref), or run `pnpm install` and `pnpm build` in a source checkout; don't download or execute a substitute.
