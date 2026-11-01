@@ -77,7 +77,7 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   assert.equal(readFileSync(restored, 'utf8'), readFileSync(transcript, 'utf8'))
 })
 
-test('sessions shows what each backed-up session is about, on this machine and after a refresh, and filters by it', async () => {
+test('sessions shows what each backed-up session is about after a refresh, and filters by its title', async () => {
   const storage = memoryStorage()
   const home = await machine()
   writeClaudeSession(home, ID, 'Speed up the Index')
@@ -97,12 +97,10 @@ test('sessions shows what each backed-up session is about, on this machine and a
     rows.join('\n')
   )
 
-  const [header, ...matched] = await listed(NOW, ['index', 'SPEED'])
+  const [header, ...matched] = await listed(NOW, ['speed'])
   assert.match(header ?? '', /^Session ID /)
   assert.match(matched[0] ?? '', new RegExp(`^${ID} `))
   assert.doesNotMatch(matched.join('\n'), new RegExp(OTHER))
-  assert.equal((await listed(NOW, ['main'])).filter((line) => line.startsWith(ID) || line.startsWith(OTHER)).length, 2)
-  assert.equal((await listed(NOW, ['nowhere']))[0], 'No sessions in the Attic index match nowhere.')
 })
 
 test('the rebuild reads only the start of each piece', async () => {

@@ -79,8 +79,8 @@ function describe(transcript: string): Pick<AgentSession, 'project' | 'about'> {
   return { project, about }
 }
 
-// Claude Code wraps what the user didn't type (slash commands, shell input, caveats) in <tags>, and flags the
-// skill text and summaries it injects.
+// Slash commands, shell input and Claude Code's own notes come wrapped in <tags>, and the skill text and
+// summaries it injects are flagged; neither says what the session is about.
 function promptOf(entry: object): string | undefined {
   if (!('type' in entry) || entry.type !== 'user' || ('isMeta' in entry && entry.isMeta === true)) return undefined
   if ('isCompactSummary' in entry && entry.isCompactSummary === true) return undefined

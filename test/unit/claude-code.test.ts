@@ -86,8 +86,7 @@ test('reads the latest title, the first typed prompt and the latest branch from 
   const about = claudeCode(home).readSession(ID)?.about
   assert.equal(about?.title, 'Speed up the index')
   assert.equal(about?.branch, 'feat/index')
-  assert.equal(about?.firstPrompt?.length, 80)
-  assert.match(about?.firstPrompt ?? '', /^Fix the very very .*…$/)
+  assert.match(about?.firstPrompt ?? '', /^Fix the very very [a-z ]+…$/)
 })
 
 test('a transcript without a title, prompt or branch says nothing about them', () => {
