@@ -7,5 +7,10 @@
     "url": "https://github.com/silent-cipher"
   },
   "repository": "https://github.com/silent-cipher/foc-agent-attic",
-  "keywords": ["filecoin", "backup", "sessions", "encryption"]
+  "keywords": [
+    "filecoin",
+    "backup",
+    "sessions",
+    "encryption"
+  ]
 }

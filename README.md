@@ -2,6 +2,28 @@
 
 A Claude Code and Codex plugin that backs up agent sessions, encrypted, to Filecoin Onchain Cloud.
 
+## Install
+
+Attic needs Node 24 or newer and stores backups on mainnet only. Each release publishes the plugin, with its built CLI, to the `release` branch.
+
+In Claude Code:
+
+```sh
+/plugin marketplace add silent-cipher/foc-agent-attic#release
+/plugin install attic@attic
+```
+
+In Codex, then start a new session:
+
+```sh
+codex plugin marketplace add silent-cipher/foc-agent-attic --ref release
+codex plugin add attic@attic
+```
+
+Then run `/attic:setup` (`$attic setup` in Codex). To update, run `/plugin marketplace update attic` in Claude Code (or enable auto-update for the marketplace in `/plugin`), or `codex plugin marketplace upgrade attic`.
+
+While the repository is private, git on your machine needs access to it, for example through `gh auth login` and `gh auth setup-git`.
+
 ## Development
 
 Requires Node 24 and pnpm (the version in `packageManager`).
@@ -28,6 +50,10 @@ claude --plugin-dir plugins/attic
 ```
 
 Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <session id>`, `/attic:sessions`, `/attic:refresh` and `/attic:restore <session id>`.
+
+### Releasing
+
+[release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps the version in `package.json` and both plugin manifests and updates `CHANGELOG.md` from the conventional commit titles merged to `main`. Merging it releases: the **release-please** workflow runs CI and the calibnet suite on every push to `main`, and only once both pass does it tag `vX.Y.Z`, publish the GitHub release with `.github/release-notes.md` above the changelog, build the bundle and push it to the `release` branch. If publishing fails after the tag exists, dispatch the workflow on that tag to publish it again (`dry_run` checks it without pushing).
 
 ## Logging in
 
