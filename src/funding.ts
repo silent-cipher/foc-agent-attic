@@ -14,9 +14,9 @@ export function fundingUrl(consoleUrl: string, network: Network): string {
 /**
  * Checks the owner's account can pay for the quoted upload and still keep the headroom for the next one.
  *
- * @returns One ✓ or ✗ line per check, and whether every check passed.
+ * @returns One ✓ or ✗ line per check, whether the funds suffice, and whether every check passed.
  */
-export function checkFunding(quote: Quote): { ready: boolean; lines: string[] } {
+export function checkFunding(quote: Quote): { ready: boolean; funded: boolean; lines: string[] } {
   const available = usdfc(quote.availableFunds)
   const short = quote.depositNeeded > 0n
   const headroom = quote.availableFunds >= parseUnits(String(MIN_AVAILABLE_USDFC), 18)
@@ -25,8 +25,10 @@ export function checkFunding(quote: Quote): { ready: boolean; lines: string[] } 
     : headroom
       ? `✓ ${available} USDFC available`
       : `✗ ${available} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`
+  const funded = !short && headroom
   return {
-    ready: quote.storageApproved && !short && headroom,
+    ready: quote.storageApproved && funded,
+    funded,
     lines: [quote.storageApproved ? '✓ Storage service approved' : '✗ Storage service not approved', funds],
   }
 }

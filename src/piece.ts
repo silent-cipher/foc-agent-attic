@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { keyResolver, newSalt, pieceKey, pieceMetadata, writeTarget } from '@filoz/keysmith'
 import * as fee from 'filecoin-encryption-envelope'
+import { AtticError } from './errors.ts'
 import { type OpenedGrant, SCOPE } from './grant.ts'
 
 /** The FEE `content_type` of every Attic piece. */
@@ -83,15 +84,19 @@ export async function openPiece(
       envelope,
       fee.decrypt((info) => {
         if (info.contentType !== CONTENT_TYPE) {
-          throw new Error(`it is ${String(info.contentType)}, not an Attic session; update Attic if it is newer`)
+          throw new AtticError(
+            'update',
+            `it is ${String(info.contentType)}, not an Attic session; update Attic if it is newer`
+          )
         }
         return resolve(info)
       })
     )
   } catch (error) {
     // FEE wraps the key resolver's own reason as the cause.
-    const reason = error instanceof Error && error.cause instanceof Error ? error.cause.message : String(error)
-    throw new Error(`The backup does not decrypt: ${reason}.`)
+    const cause = error instanceof Error ? error.cause : undefined
+    const reason = cause instanceof Error ? cause.message : String(error)
+    throw new Error(`The backup does not decrypt: ${reason}.`, { cause })
   }
   const view = new DataView(piece.buffer, piece.byteOffset, piece.byteLength)
   const length = piece.length >= 4 ? view.getUint32(0) : Number.POSITIVE_INFINITY
@@ -145,7 +150,10 @@ function parseHeader(json: Uint8Array): Header {
     throw new Error('The backup is damaged: its header is not JSON.')
   }
   if (typeof header === 'object' && header !== null && 'v' in header && header.v !== 1) {
-    throw new Error(`The backup is format ${String(header.v)}, newer than this Attic. Update Attic to restore it.`)
+    throw new AtticError(
+      'update',
+      `The backup is format ${String(header.v)}, newer than this Attic. Update Attic to restore it.`
+    )
   }
   if (!isHeader(header)) throw new Error('The backup is damaged: its header is not an Attic session header.')
   return header

@@ -24,9 +24,11 @@ const ready: Readiness = {
 
 function report(changes: Partial<Readiness>): { code: number; text: string } {
   const lines: string[] = []
-  const code = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
+  const { code } = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
   return { code, text: lines.join('\n') }
 }
+
+const readiness = (changes: Partial<Readiness>) => reportReadiness({ ...ready, ...changes }, () => undefined, NOW)
 
 test('a ready account exits 0 and names the earlier of the two expiries', () => {
   const { code, text } = report({})
@@ -64,6 +66,36 @@ test('low funds or no storage approval print the pre-filled funding link', () =>
   assert.match(report({ availableFunds: 0n }).text, /✗ 0\.00 USDFC available \(keep at least 1\)/)
 })
 
+test('the readiness result holds each check, the expiry once authorized and the links that fix what is missing', () => {
+  assert.deepEqual(readiness({}), {
+    code: 0,
+    authorized: true,
+    storageApproved: true,
+    funded: true,
+    expiresAt: '2027-01-25T08:00:00.000Z',
+    approveUrl: ready.approveUrl,
+  })
+  assert.deepEqual(readiness({ authorizedUntil: 0, availableFunds: 0n }), {
+    code: 2,
+    needs: 'approval',
+    authorized: false,
+    storageApproved: true,
+    funded: false,
+    approveUrl: ready.approveUrl,
+    fundingUrl: ready.fundingUrl,
+  })
+  assert.deepEqual(readiness({ storageApproved: false }), {
+    code: 2,
+    needs: 'deposit',
+    authorized: true,
+    storageApproved: false,
+    funded: true,
+    expiresAt: '2027-01-25T08:00:00.000Z',
+    approveUrl: ready.approveUrl,
+    fundingUrl: ready.fundingUrl,
+  })
+})
+
 // Attic keeps its login under HOME.
 async function home(): Promise<Home> {
   const home = await tempHome()
@@ -76,7 +108,7 @@ const saved = (home: Home) => parseEnv(readFileSync(join(home.root, '.attic', 's
 async function runSetup(grant?: string): Promise<{ code: number; text: string }> {
   const options: SetupOptions = { network: 'calibration', consoleUrl: 'https://pay.filecoin.cloud' }
   const lines: string[] = []
-  const code = await setup(
+  const { code } = await setup(
     grant === undefined ? options : { ...options, grant },
     (line) => lines.push(line),
     memoryStorage().connect

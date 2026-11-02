@@ -55,7 +55,7 @@ test('the idle run discovers both agents, skips active files, and snapshots befo
       },
     }
   }
-  assert.equal(await backup(f.options, undefined, f.print, connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, connect)).code, 0)
   assert.equal(batches, 1)
   assert.equal(f.state.pieces.size, 2)
   assert.equal(indexEntry('active'), undefined)
@@ -76,7 +76,7 @@ test('refresh imports another machine before unchanged sessions skip all writes'
   const f = await fixture()
   const paths = writeClaudeSession(f.home, ID)
   age(f.home.claude, paths)
-  assert.equal(await backup(f.options, ID, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, ID, f.print, f.connect)).code, 0)
   writeFileSync(join(f.home.root, '.attic', 'index.json'), '{"sessions":{}}')
   const connect: Connect = (login, print) => ({
     ...f.connect(login, print),
@@ -93,7 +93,7 @@ test('refresh imports another machine before unchanged sessions skip all writes'
       throw new Error('nothing due must not remove')
     },
   })
-  assert.equal(await backup(f.options, undefined, f.print, connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, connect)).code, 0)
   assert.equal(f.state.pieces.size, 1)
   assert.ok(indexEntry(ID))
   assert.deepEqual(lastRun()?.counts, { backedUp: 0, skipped: 1, failed: 0 })
@@ -135,13 +135,39 @@ test('failed sessions retain their old piece while successful replacements remov
       },
     }
   }
-  assert.equal(await backup(f.options, undefined, f.print, connect), 1)
+  assert.deepEqual(await backup(f.options, undefined, f.print, connect), {
+    code: 1,
+    message: `✗ Session ${OTHER}: provider failed`,
+    backedUp: 1,
+    skipped: 0,
+    failed: 1,
+  })
   assert.equal(removals, 1)
   assert.equal(f.state.pieces.has(previous.pieceCid), false)
   assert.equal(f.state.pieces.has(previousOther.pieceCid), true)
   assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 0, failed: 1 })
-  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 0)
   assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 1, failed: 0 })
+})
+
+test('a failed removal of the old piece fails the run with its reason, though nothing failed to back up', async () => {
+  const f = await fixture()
+  const paths = writeClaudeSession(f.home, ID)
+  await backup(f.options, ID, f.print, f.connect)
+  appendFileSync(join(f.home.claude, paths[0] ?? ''), '{}\n')
+  const connect: Connect = (login, print) => ({
+    ...f.connect(login, print),
+    scheduleRemoval: async () => {
+      throw new Error('removal reverted')
+    },
+  })
+  assert.deepEqual(await backup(f.options, ID, f.print, connect), {
+    code: 1,
+    message: '✗ Old pieces remain stored: removal reverted',
+    backedUp: 1,
+    skipped: 0,
+    failed: 0,
+  })
 })
 
 test('a malformed session does not stop another session, and a failed listing releases the lock', async () => {
@@ -150,7 +176,7 @@ test('a malformed session does not stop another session, and a failed listing re
   writeFileSync(join(f.home.codex, paths[0] ?? ''), 'invalid\n')
   age(f.home.codex, paths)
   age(f.home.claude, writeClaudeSession(f.home, OTHER))
-  assert.equal(await backup(f.options, undefined, f.print, f.connect), 1)
+  assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 1)
   assert.ok(indexEntry(OTHER))
   assert.equal(indexEntry(ID), undefined)
   assert.equal(lastRun()?.counts?.failed, 1)
@@ -164,24 +190,22 @@ test('a lock held by a running process skips the run, and the lock of a stopped 
   const f = await fixture()
   const lock = join(f.home.root, '.attic', 'backup.lock')
   writeFileSync(lock, String(process.pid))
-  assert.equal(
-    await backup(f.options, undefined, f.print, () => {
-      throw new Error('must not connect')
-    }),
-    0
-  )
+  const skipped = await backup(f.options, undefined, f.print, () => {
+    throw new Error('must not connect')
+  })
+  assert.deepEqual(skipped, { code: 0, backedUp: 0, skipped: 0, failed: 0, locked: true })
   assert.equal(lastRun(), undefined)
   assert.equal(existsSync(lock), true)
 
   const stopped = spawnSync(process.execPath, ['-e', '']).pid
   writeFileSync(lock, String(stopped))
-  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 0)
   assert.ok(f.lines.includes(`Removed the lock of stopped backup process ${stopped}.`), f.lines.join('\n'))
   assert.equal(lastRun()?.ok, true)
   assert.equal(existsSync(lock), false)
 
   writeFileSync(lock, '')
-  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 0)
   assert.equal(existsSync(lock), false)
 })
 
@@ -193,11 +217,11 @@ test('explicit and idle runs upload nothing for a snapshot older than the indexe
   assert.ok(newest)
   appendFileSync(join(f.home.claude, paths[0] ?? ''), '{}\n')
   age(f.home.claude, paths)
-  assert.equal(await backup(f.options, ID, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, ID, f.print, f.connect)).code, 0)
   assert.ok(f.lines.some((line) => line.startsWith(`✓ Skipped session ${ID}: the index holds a newer backup`)))
   assert.equal(indexEntry(ID)?.pieceCid, newest.pieceCid)
   assert.equal(f.state.pieces.size, 1)
-  assert.equal(await backup(f.options, undefined, f.print, f.connect), 0)
+  assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 0)
   assert.equal(f.state.pieces.size, 1)
   assert.deepEqual(lastRun()?.counts, { backedUp: 0, skipped: 1, failed: 0 })
 })
@@ -259,7 +283,7 @@ test('a session that would push its chunk over the limit starts the next chunk',
   )
   // Either session fits alone; both together do not.
   const chunkBytes = Math.max(claude ?? 0, codex ?? 0) + 1
-  assert.equal(await backup({ ...f.options, chunkBytes }, undefined, f.print, connect), 0)
+  assert.equal((await backup({ ...f.options, chunkBytes }, undefined, f.print, connect)).code, 0)
   assert.deepEqual(calls, ['store 1', 'remove 1', 'store 1', 'remove 1'])
   assert.equal(f.state.pieces.size, 2)
 })

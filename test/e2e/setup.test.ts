@@ -86,16 +86,27 @@ test('ATTIC_CONSOLE_URL points the console links at another console, for testing
   assert.equal(result.status, 2)
   assert.match(result.stdout, /\nhttp:\/\/localhost:3000\/console\/setup\?authorize=0x/)
   const bad = runAttic(home, ['setup'], { ATTIC_CONSOLE_URL: 'localhost:3000' })
-  assert.equal(bad.status, 1)
+  assert.equal(bad.status, 64)
   assert.match(bad.stderr, /ATTIC_CONSOLE_URL must be an http\(s\) URL/)
 })
 
 test('setup has no network option, and ATTIC_NETWORK takes only calibration', async () => {
   const home = await tempHome()
   const flag = runAttic(home, ['setup', '--network', 'calibration'])
-  assert.equal(flag.status, 1)
+  assert.equal(flag.status, 64)
   assert.match(flag.stderr, /Unknown option '--network'/)
   const env = runAttic(home, ['setup'], { ATTIC_NETWORK: 'devnet' })
-  assert.equal(env.status, 1)
+  assert.equal(env.status, 64)
   assert.match(env.stderr, /ATTIC_NETWORK can only be calibration/)
+})
+
+test('with --json, setup prints the console link and session address as JSON, and its progress on stderr', async () => {
+  const home = await tempHome()
+  const result = runAttic(home, ['setup', '--json'], CALIBRATION)
+  assert.equal(result.status, 2, result.stderr)
+  const address = privateKeyToAccount(savedKey(home)).address
+  const { needs, sessionAddress, approveUrl } = JSON.parse(result.stdout)
+  assert.deepEqual([needs, sessionAddress], ['grant', address])
+  assert.match(approveUrl, /^https:\/\/pay\.filecoin\.cloud\/console\/setup\?authorize=0x/)
+  assert.ok(result.stderr.includes(`The console must show session address ${address}.`), result.stderr)
 })

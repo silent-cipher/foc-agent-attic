@@ -93,7 +93,7 @@ test('--current refuses missing, ambiguous or unsafe context and conflicting arg
     [['restore', '--current'], { CODEX_THREAD_ID: ID }, /Unknown option/],
   ] as const) {
     const result = runAttic(home, args, env)
-    assert.equal(result.status, 1)
+    assert.equal(result.status, 64)
     assert.match(result.stderr, reason)
     assert.equal(result.stdout, '')
   }
@@ -183,4 +183,49 @@ test('backup without an ID skips a held lock and preserves status', async () => 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /skipping this run/)
   assert.equal(readFileSync(status, 'utf8'), 'previous status')
+})
+
+test('with --json, backup prints its counts on stdout and its progress on stderr', async () => {
+  const home = await tempHome()
+  await logIn(home)
+  writeIndexEntry(home, writeClaudeSession(home, ID))
+  const result = runAttic(home, ['backup', ID, '--json'], CALIBRATION)
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(JSON.parse(result.stdout), { backedUp: 0, skipped: 1, failed: 0 })
+  assert.match(result.stderr, /already backed up, unchanged/)
+
+  writeFileSync(join(home.root, '.attic', 'backup.lock'), String(process.pid))
+  const locked = runAttic(home, ['backup', '--json'], CALIBRATION)
+  assert.equal(locked.status, 0, locked.stderr)
+  assert.deepEqual(JSON.parse(locked.stdout), { backedUp: 0, skipped: 0, failed: 0, locked: true })
+})
+
+test('with --json, a failure is one JSON error on stdout saying what to fix and whether a retry can help', async () => {
+  const home = await tempHome()
+  const loggedIn = await tempHome()
+  await logIn(loggedIn)
+  const cases = [
+    [['refresh', '--json'], 1, 'setup'],
+    [['backup', 'a0a0a0a0-0000-4000-8000-000000000000', '--json'], 1, 'not_found'],
+    [['restore', ID, '--json'], 1, 'not_found'],
+    [['restore', '--json'], 64, 'usage'],
+    [['backup', '--current', '--json'], 64, 'usage'],
+  ] as const
+  for (const [args, status, type] of cases) {
+    const result = type === 'setup' ? runAttic(home, args) : runAttic(loggedIn, args, CALIBRATION)
+    assert.equal(result.status, status, args.join(' '))
+    const error = JSON.parse(result.stdout)
+    assert.deepEqual([error.error, error.retryable], [type, false], args.join(' '))
+    assert.ok(result.stderr.startsWith(`Error: ${error.message}\n`), result.stderr)
+  }
+  writeIndexEntry(loggedIn, writeClaudeSession(loggedIn, ID), { network: 'mainnet' })
+  const other = runAttic(loggedIn, ['restore', ID, '--json'], CALIBRATION)
+  assert.equal(other.status, 1)
+  assert.equal(JSON.parse(other.stdout).error, 'conflict')
+
+  writeFileSync(join(loggedIn.root, '.attic', 'index.json'), '{"sessions": {')
+  const truncated = runAttic(loggedIn, ['restore', ID, '--json'], CALIBRATION)
+  assert.equal(truncated.status, 1)
+  const { error, retryable } = JSON.parse(truncated.stdout)
+  assert.deepEqual([error, retryable], ['conflict', false])
 })

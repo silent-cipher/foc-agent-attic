@@ -16,5 +16,6 @@ Then, by exit code:
 
 - **0:** say the session is restored, or was already here, and show the resume command (`claude --resume <id>` or `codex resume <id>`) exactly as printed. It resumes the session from any folder.
 - **1:** handle an ID missing from the index with the refresh flow above; otherwise show the error. Nothing was written. If the local session is newer than the backup, it needs no restore: offer to back up the newer version with `/attic:backup <session id>`. If a file already exists and differs otherwise, the user can move it away and run restore again; never move or delete it yourself.
+- **64:** the arguments were wrong. Show the error; don't run the same command again.
 
 Never print the contents of `~/.attic/session.env`.

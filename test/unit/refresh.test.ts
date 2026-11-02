@@ -36,7 +36,7 @@ function options(home: Home): BackupOptions {
 async function backUp(home: Home, storage: Storage, id: string): Promise<IndexEntry> {
   at(home)
   writeClaudeSession(home, id)
-  assert.equal(await backup(options(home), id, () => undefined, storage.connect), 0)
+  assert.equal((await backup(options(home), id, () => undefined, storage.connect)).code, 0)
   const entry = indexEntry(id)
   assert.ok(entry)
   return entry
@@ -70,7 +70,7 @@ test('refresh adds a session another machine backed up, which then restores here
       .toSorted(),
     [ID, OTHER].toSorted()
   )
-  assert.equal(await restore(options(b), ID, () => undefined, storage.connect), 0)
+  await restore(options(b), ID, () => undefined, storage.connect)
   assert.deepEqual(readFileSync(join(b.claude, 'projects', '-tmp-attic-e2e', `${ID}.jsonl`)), transcript)
 })
 
@@ -128,7 +128,7 @@ test('a replacement with the same timestamp wins over an indexed piece that was 
   const transcript = join(a.claude, writeClaudeSession(a, ID)[0] ?? '')
   const written = new Date('2026-01-01T00:00:00.000Z')
   utimesSync(transcript, written, written)
-  assert.equal(await backup(options(a), ID, () => undefined, storage.connect), 0)
+  assert.equal((await backup(options(a), ID, () => undefined, storage.connect)).code, 0)
   const first = indexEntry(ID)
   assert.ok(first)
   const b = await machine()
@@ -137,7 +137,7 @@ test('a replacement with the same timestamp wins over an indexed piece that was 
   at(a)
   appendFileSync(transcript, '{"type":"assistant"}\n')
   utimesSync(transcript, written, written)
-  assert.equal(await backup(options(a), ID, () => undefined, storage.connect), 0)
+  assert.equal((await backup(options(a), ID, () => undefined, storage.connect)).code, 0)
   const replacement = indexEntry(ID)
   assert.equal(replacement?.lastWriteAt, first.lastWriteAt)
   assert.equal(storage.state.pieces.has(first.pieceCid), false)

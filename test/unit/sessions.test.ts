@@ -59,7 +59,7 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
 
   const fresh = await machine()
   const output = printed()
-  assert.equal(await setup(options(fresh), output.print, storage.connect), 0)
+  assert.equal((await setup(options(fresh), output.print, storage.connect)).code, 0)
   assert.ok(output.lines.includes('✓ Index refreshed: 2 new sessions, 0 updated'), output.lines.join('\n'))
   assert.deepEqual({ ...indexEntry(ID), copies: [] }, { ...newest, copies: [] })
 
@@ -71,7 +71,7 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   )
   assert.match(rows[1] ?? '', new RegExp(`^${OTHER} `))
 
-  assert.equal(await restore(options(fresh), ID, printed().print, storage.connect), 0)
+  await restore(options(fresh), ID, printed().print, storage.connect)
   const restored = join(fresh.claude, 'projects', '-tmp-attic-e2e', `${ID}.jsonl`)
   assert.equal(readFileSync(restored, 'utf8'), readFileSync(transcript, 'utf8'))
 })
@@ -84,7 +84,7 @@ test('sessions shows what each backed-up session is about after a refresh, and f
   await backup(options(home), ID, printed().print, storage.connect)
   await backup(options(home), OTHER, printed().print, storage.connect)
 
-  assert.equal(await setup(options(await machine()), printed().print, storage.connect), 0)
+  assert.equal((await setup(options(await machine()), printed().print, storage.connect)).code, 0)
   const rows = (await listed()).filter((line) => line.startsWith(ID) || line.startsWith(OTHER))
   assert.equal(rows.length, 2)
   assert.ok(
@@ -123,11 +123,17 @@ test('a piece that is not an Attic session is skipped and reported', async () =>
   storage.state.pieces.set('memory-junk', new TextEncoder().encode('not a piece'))
 
   const output = printed()
-  await setup(options(await machine()), output.print, storage.connect)
+  const result = await setup(options(await machine()), output.print, storage.connect)
   assert.ok(
     output.lines.some((line) => line.startsWith('✗ Skipped piece memory-junk: ')),
     output.lines.join('\n')
   )
+  assert.ok('refresh' in result)
+  assert.deepEqual(
+    result.refresh?.skippedPieces.map(({ pieceCid }) => pieceCid),
+    ['memory-junk']
+  )
+  assert.deepEqual([result.refresh?.added, result.refresh?.sessions], [1, 1])
   assert.deepEqual(
     indexEntries().map((entry) => entry.sessionId),
     [ID]
@@ -142,7 +148,7 @@ test('setup leaves an existing index alone', async () => {
   storage.state.pieces.clear()
 
   const output = printed()
-  await setup(options(home), output.print, storage.connect)
+  assert.equal('refresh' in (await setup(options(home), output.print, storage.connect)), false)
   assert.ok(!output.lines.some((line) => line.includes('Found')), output.lines.join('\n'))
   assert.ok(indexEntry(ID))
 })
@@ -165,7 +171,7 @@ test('sessions shows how the last backup run ended', async () => {
 
   storage.state.authorizedUntil = 4102444800
   storage.state.storeError = new Error('commit timed out\nRequest body: …')
-  assert.equal(await backup(options(home), OTHER, printed().print, storage.connect), 1)
+  assert.equal((await backup(options(home), OTHER, printed().print, storage.connect)).code, 1)
   assert.match((await listed()).join('\n'), new RegExp(`UTC failed:\\n {2}✗ Session ${OTHER}: commit timed out$`))
 })
 

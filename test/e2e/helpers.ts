@@ -20,14 +20,11 @@ export async function tempHome(): Promise<Home> {
   return { root, claude: join(root, '.claude'), codex: join(root, '.codex') }
 }
 
+/** The environment variables that point Attic and the agents at `home`. */
+export const homeEnv = (home: Home) => ({ HOME: home.root, CLAUDE_CONFIG_DIR: home.claude, CODEX_HOME: home.codex })
+
 // A bare environment, as launchd and systemd give the daily job.
-const bareEnv = (home: Home, env: Record<string, string>) => ({
-  PATH: '/usr/bin:/bin',
-  HOME: home.root,
-  CLAUDE_CONFIG_DIR: home.claude,
-  CODEX_HOME: home.codex,
-  ...env,
-})
+const bareEnv = (home: Home, env: Record<string, string>) => ({ PATH: '/usr/bin:/bin', ...homeEnv(home), ...env })
 
 /** Runs the bundle in `home` with a bare environment, plus `env`. */
 export function runAttic(

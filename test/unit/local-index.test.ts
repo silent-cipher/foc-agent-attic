@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { AtticError } from '../../src/errors.ts'
 import { type IndexEntry, indexEntry, isUpToDate, recordEntry } from '../../src/local-index.ts'
 import type { Keyholder } from '../../src/login.ts'
 import { tempHome } from '../e2e/helpers.ts'
@@ -67,10 +68,14 @@ test('recording a session keeps every other session and replaces its own older e
   assert.equal(indexEntry('s2')?.pieceCid, 'bafk2')
 })
 
-test('a file that is not an index is refused, not replaced', async () => {
+test('a file that is not an index, or not even JSON, is refused as a conflict, not replaced', async () => {
   const root = await home()
   mkdirSync(join(root, '.attic'))
-  writeFileSync(join(root, '.attic', 'index.json'), '{"backups":[]}')
-  assert.throws(() => indexEntry('s1'), /index\.json is not an Attic index/)
-  assert.throws(() => recordEntry(ENTRY), /index\.json is not an Attic index/)
+  const conflict = (error: unknown) =>
+    error instanceof AtticError && error.type === 'conflict' && /index\.json is not an Attic index/.test(error.message)
+  for (const text of ['{"backups":[]}', '{"sessions": {"s1": {']) {
+    writeFileSync(join(root, '.attic', 'index.json'), text)
+    assert.throws(() => indexEntry('s1'), conflict, text)
+    assert.throws(() => recordEntry(ENTRY), conflict, text)
+  }
 })
