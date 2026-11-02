@@ -25,9 +25,10 @@ export function checkFunding(quote: Quote): { ready: boolean; funded: boolean; l
     : headroom
       ? `✓ ${available} USDFC available`
       : `✗ ${available} USDFC available (keep at least ${MIN_AVAILABLE_USDFC})`
+  const funded = !short && headroom
   return {
-    ready: quote.storageApproved && !short && headroom,
-    funded: !short && headroom,
+    ready: quote.storageApproved && funded,
+    funded,
     lines: [quote.storageApproved ? '✓ Storage service approved' : '✗ Storage service not approved', funds],
   }
 }

@@ -21,7 +21,6 @@ export async function restore(
   print: (line: string) => void,
   connect: Connect
 ): Promise<{
-  code: 0
   sessionId: string
   agent: Agent['name']
   written: number
@@ -50,8 +49,7 @@ export async function restore(
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
   const envelope = await connect(login, print).download(entry.pieceCid)
   const { header, files } = await openPiece(login.grant, envelope).catch((error: unknown) => {
-    const message = `${error instanceof Error ? error.message : String(error)} Nothing was written.`
-    throw error instanceof AtticError ? new AtticError(error.type, message) : new Error(message, { cause: error })
+    throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`, { cause: error })
   })
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)
@@ -68,7 +66,7 @@ export async function restore(
   const resumeCommand = agent.resumeCommand(id)
   print('Resume it from any folder with:')
   print(resumeCommand)
-  return { code: 0, sessionId: id, agent: agent.name, written, files: files.length, resumeCommand }
+  return { sessionId: id, agent: agent.name, written, files: files.length, resumeCommand }
 }
 
 /**

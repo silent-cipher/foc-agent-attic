@@ -49,7 +49,6 @@ test('a backed-up session, deleted locally, restores byte for byte', async () =>
   rmSync(join(home.claude, 'projects'), { recursive: true })
   const output = printed()
   assert.deepEqual(await restore(options(home), ID, output.print, storage.connect), {
-    code: 0,
     sessionId: ID,
     agent: 'claude-code',
     written: 2,
@@ -85,7 +84,7 @@ test('active snapshots upload again only after their bytes change, for both agen
     assert.equal(storage.state.pieces.size, 1)
     assert.notEqual(indexEntry(ID)?.pieceCid, first.pieceCid)
     rmSync(root, { recursive: true })
-    assert.equal((await restore(options(home), ID, printed().print, storage.connect)).code, 0)
+    await restore(options(home), ID, printed().print, storage.connect)
     assert.deepEqual(readFileSync(transcript), expected)
   }
 })
@@ -212,11 +211,11 @@ test('Codex backup restores on a new machine after index rebuild, and lists alon
   assert.match(listing.lines.join('\n'), new RegExp(`${ID} +codex +/tmp/attic-e2e`))
   assert.match(listing.lines.join('\n'), new RegExp(`${OTHER} +claude-code`))
   const output = printed()
-  assert.equal((await restore(options(fresh), ID, output.print, storage.connect)).code, 0)
+  await restore(options(fresh), ID, output.print, storage.connect)
   assert.deepEqual(readFileSync(join(fresh.codex, path)), original)
   assert.equal(existsSync(fresh.claude), false)
   assert.ok(output.lines.includes(`codex resume ${ID}`))
-  assert.equal((await restore(options(fresh), ID, output.print, storage.connect)).code, 0)
+  await restore(options(fresh), ID, output.print, storage.connect)
 })
 
 test('restore refuses a Codex piece indexed as Claude Code and writes nothing', async () => {

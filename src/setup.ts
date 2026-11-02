@@ -76,21 +76,19 @@ export type Readiness = Account & {
   fundingUrl: string
 }
 
-/** The checks, when the key expires if it is authorized, and the console links that fix what is missing. */
-type Checks = {
+/**
+ * The checks, when the key expires if it is authorized, and the console links that fix what is missing.
+ * Code 0 when every check passed, else 2 with what the owner does first: approve the key, then deposit.
+ * `fundingUrl` is set whenever a deposit is needed too.
+ */
+export type ReadinessResult = {
   authorized: boolean
   storageApproved: boolean
   funded: boolean
   expiresAt?: string
   approveUrl: string
   fundingUrl?: string
-}
-
-/**
- * Code 0 when every check passed, else 2 with what the owner does first: approve the key, then deposit.
- * `fundingUrl` is set whenever a deposit is needed too.
- */
-export type ReadinessResult = Checks & ({ code: 0 } | { code: 2; needs: 'approval' | 'deposit' })
+} & ({ code: 0 } | { code: 2; needs: 'approval' | 'deposit' })
 
 /** Prints the readiness checklist and the console links that fix what is missing. */
 export function reportReadiness(
@@ -100,28 +98,29 @@ export function reportReadiness(
 ): ReadinessResult {
   const authorized = r.authorizedUntil > now
   const funding = checkFunding({ ...r, depositNeeded: 0n })
-  const checks: Checks = {
-    authorized,
-    storageApproved: r.storageApproved,
-    funded: funding.funded,
-    approveUrl: r.approveUrl,
-  }
+  const expires = Math.min(r.authorizedUntil, r.grantExpires)
+  const expiresAt = new Date(expires * 1000).toISOString()
   print(authorized ? '✓ Session key authorized' : `✗ Session key not authorized by ${r.owner}`)
   for (const line of funding.lines) print(line)
   if (authorized) {
-    const expires = Math.min(r.authorizedUntil, r.grantExpires)
     const days = Math.floor((expires - now) / 86_400)
-    checks.expiresAt = new Date(expires * 1000).toISOString()
-    print(`Session key expires ${checks.expiresAt.slice(0, 10)} (in ${days} days).`)
+    print(`Session key expires ${expiresAt.slice(0, 10)} (in ${days} days).`)
     print('To renew it before then, approve it again in the console and run setup with the new Grant:')
   } else {
     print('Approve this session key in the Filecoin Cloud console:')
   }
   print(r.approveUrl)
   if (!funding.ready) {
-    checks.fundingUrl = r.fundingUrl
     print('Deposit USDFC and approve the storage service in one step:')
     print(r.fundingUrl)
+  }
+  const checks = {
+    authorized,
+    storageApproved: r.storageApproved,
+    funded: funding.funded,
+    ...(authorized ? { expiresAt } : {}),
+    approveUrl: r.approveUrl,
+    ...(funding.ready ? {} : { fundingUrl: r.fundingUrl }),
   }
   if (authorized && funding.ready) return { code: 0, ...checks }
   return { code: 2, needs: authorized ? 'deposit' : 'approval', ...checks }

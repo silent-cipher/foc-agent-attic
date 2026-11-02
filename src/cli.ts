@@ -168,16 +168,16 @@ export async function run(args: readonly string[], stdout: Write, stderr: Write)
     if (!known) {
       throw new AtticError('usage', `Give a command: ${Object.keys(COMMANDS).join(', ')}.`)
     }
-    const { code, result } = await command(name, rest, (line) => (json ? stderr : stdout)(`${line}\n`))
+    const { code, result } = await command(name, rest, json, (line) => (json ? stderr : stdout)(`${line}\n`))
     if (json) stdout(`${JSON.stringify(result)}\n`)
     return code
   } catch (error) {
     const message = errorMessage(error)
-    const type = error instanceof AtticError ? error.type : isParseError(error) ? 'usage' : 'failed'
+    const type = errorType(error)
     const help = known ? `attic ${name} --help for its arguments` : 'attic --help for the commands'
     const hint = type === 'usage' ? `\nRun ${help}.` : ''
     stderr(`Error: ${message}${hint}\n`)
-    if (json) stdout(`${JSON.stringify(failure(type, message))}\n`)
+    if (json) stdout(`${JSON.stringify({ error: type, message, retryable: type === 'failed' })}\n`)
     return type === 'usage' ? USAGE_ERROR : 1
   }
 }
@@ -186,17 +186,19 @@ export async function run(args: readonly string[], stdout: Write, stderr: Write)
 async function command(
   name: Command,
   args: string[],
+  json: boolean,
   print: (line: string) => void
 ): Promise<{ code: number; result: unknown }> {
   const options = envOptions(process.env)
-  const json = { json: { type: 'boolean' } } as const
+  // Declared only so parseArgs accepts it; run reads --json before parsing, to report a parse error as JSON.
+  const jsonOption = { json: { type: 'boolean' } } as const
   if (name === 'setup') {
-    const { grant } = parseArgs({ args, options: { ...json, grant: { type: 'string' } } }).values
+    const { grant } = parseArgs({ args, options: { ...jsonOption, grant: { type: 'string' } } }).values
     return ended(await setup({ ...options, ...(grant === undefined ? {} : { grant }) }, print, synapseStorage))
   }
   if (name === 'sessions') {
-    const { values, positionals } = parseArgs({ args, allowPositionals: true, options: json })
-    if (!values.json) return { code: await sessions(options.network, positionals, print), result: undefined }
+    const { positionals } = parseArgs({ args, allowPositionals: true, options: jsonOption })
+    if (!json) return { code: await sessions(options.network, positionals, print), result: undefined }
     const found = matchingSessions(indexEntries(), positionals)
     // Only what an agent needs to pick a session: file lists would overflow its tool output.
     const picked = found.map(({ sessionId, agent, title, firstPrompt, project, branch, lastWriteAt }) => ({
@@ -211,18 +213,18 @@ async function command(
     return { code: 0, result: picked }
   }
   if (name === 'refresh') {
-    parseArgs({ args, options: json })
+    parseArgs({ args, options: jsonOption })
     const login = await openLogin(options.network)
     return { code: 0, result: await refreshIndex(login, synapseStorage(login, print), print) }
   }
   if (name === 'restore') {
-    const { positionals } = parseArgs({ args, allowPositionals: true, options: json })
-    return ended(await restore(options, sessionId(positionals), print, synapseStorage))
+    const { positionals } = parseArgs({ args, allowPositionals: true, options: jsonOption })
+    return { code: 0, result: await restore(options, sessionId(positionals), print, synapseStorage) }
   }
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { ...json, current: { type: 'boolean' } },
+    options: { ...jsonOption, current: { type: 'boolean' } },
   })
   let { agents } = options
   if (values.current) {
@@ -239,17 +241,22 @@ async function command(
     agents = agents.filter((agent) => agent.name === (claude ? 'claude-code' : 'codex'))
   }
   const id = positionals.length === 0 ? undefined : sessionId(positionals)
-  const outcome = await backup({ ...options, agents }, id, print, synapseStorage)
-  if (outcome.code !== 1) return ended(outcome)
-  const { code, ...result } = outcome
-  return { code, result: { ...failure('failed', outcome.message), ...result } }
+  return ended(await backup({ ...options, agents }, id, print, synapseStorage))
 }
 
-const ended = ({ code, ...result }: { code: number }) => ({ code, result })
+// A result that exits 1 carries its message; --json gives it the same error fields as a thrown failure.
+const ended = ({ code, ...result }: { code: number }) => ({
+  code,
+  result: code === 1 ? { error: 'failed', retryable: true, ...result } : result,
+})
 
-/** What --json prints for a failure: its type, and whether running the same command again can help. */
-function failure(type: FixFirst | 'failed', message: string) {
-  return { error: type, message, retryable: type === 'failed' }
+/** What a failure needs before a retry can help: the first AtticError in its causes, else nothing known. */
+function errorType(error: unknown): FixFirst | 'failed' {
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    if (cause instanceof AtticError) return cause.type
+  }
+  const parse = error instanceof TypeError && 'code' in error && String(error.code).startsWith('ERR_PARSE_ARGS_')
+  return parse ? 'usage' : 'failed'
 }
 
 function isCommand(name: string | undefined): name is Command {
@@ -284,10 +291,6 @@ function consoleOrigin(value: string): string {
     throw new AtticError('usage', `ATTIC_CONSOLE_URL must be an http(s) URL, not ${value}`)
   }
   return url.origin
-}
-
-function isParseError(error: unknown): boolean {
-  return error instanceof TypeError && 'code' in error && String(error.code).startsWith('ERR_PARSE_ARGS_')
 }
 
 // viem's full message adds request arguments, a docs link and its version over several lines.

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { test } from 'node:test'
 import { newSalt, pieceKey, pieceMetadata, writeTarget } from '@filoz/keysmith'
 import * as fee from 'filecoin-encryption-envelope'
+import { AtticError } from '../../src/errors.ts'
 import { openGrant, SCOPE } from '../../src/grant.ts'
 import { CONTENT_TYPE, fileEntries, type Header, openPiece, sealPiece } from '../../src/piece.ts'
 import { CALIBRATION, makeGrant, SESSION_KEY, STRANGER_KEY } from '../make-grant.ts'
@@ -84,9 +85,12 @@ test("another owner's Grant cannot open a piece", async () => {
 })
 
 test('an envelope of another content type is refused', async () => {
-  await assert.rejects(openPiece(await grantFor(), await encryptRaw(new TextEncoder().encode('photo'), 'image/png')), {
-    type: 'update',
-    message: /does not decrypt: it is image\/png, not an Attic session/,
+  const opened = openPiece(await grantFor(), await encryptRaw(new TextEncoder().encode('photo'), 'image/png'))
+  // The CLI reads the failure's type from its causes: an update, not a retry.
+  await assert.rejects(opened, (error: Error) => {
+    assert.match(error.message, /does not decrypt: it is image\/png, not an Attic session/)
+    assert.ok(error.cause instanceof AtticError && error.cause.type === 'update', String(error.cause))
+    return true
   })
 })
 

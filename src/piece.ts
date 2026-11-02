@@ -95,8 +95,8 @@ export async function openPiece(
   } catch (error) {
     // FEE wraps the key resolver's own reason as the cause.
     const cause = error instanceof Error ? error.cause : undefined
-    const message = `The backup does not decrypt: ${cause instanceof Error ? cause.message : String(error)}.`
-    throw cause instanceof AtticError ? new AtticError(cause.type, message) : new Error(message)
+    const reason = cause instanceof Error ? cause.message : String(error)
+    throw new Error(`The backup does not decrypt: ${reason}.`, { cause })
   }
   const view = new DataView(piece.buffer, piece.byteOffset, piece.byteLength)
   const length = piece.length >= 4 ? view.getUint32(0) : Number.POSITIVE_INFINITY

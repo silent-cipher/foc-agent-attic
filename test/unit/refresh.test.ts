@@ -70,7 +70,7 @@ test('refresh adds a session another machine backed up, which then restores here
       .toSorted(),
     [ID, OTHER].toSorted()
   )
-  assert.equal((await restore(options(b), ID, () => undefined, storage.connect)).code, 0)
+  await restore(options(b), ID, () => undefined, storage.connect)
   assert.deepEqual(readFileSync(join(b.claude, 'projects', '-tmp-attic-e2e', `${ID}.jsonl`)), transcript)
 })
 

@@ -71,7 +71,7 @@ test('setup on a new machine rebuilds the index from the newest piece of each se
   )
   assert.match(rows[1] ?? '', new RegExp(`^${OTHER} `))
 
-  assert.equal((await restore(options(fresh), ID, printed().print, storage.connect)).code, 0)
+  await restore(options(fresh), ID, printed().print, storage.connect)
   const restored = join(fresh.claude, 'projects', '-tmp-attic-e2e', `${ID}.jsonl`)
   assert.equal(readFileSync(restored, 'utf8'), readFileSync(transcript, 'utf8'))
 })

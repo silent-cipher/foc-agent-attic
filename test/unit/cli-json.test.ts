@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { mock, test } from 'node:test'
-import { type Home, logIn, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
+import { newSalt, pieceKey, pieceMetadata, writeTarget } from '@filoz/keysmith'
+import * as fee from 'filecoin-encryption-envelope'
+import { SCOPE } from '../../src/grant.ts'
+import { indexEntry } from '../../src/local-index.ts'
+import { openLogin } from '../../src/login.ts'
+import { type Home, homeEnv, logIn, tempHome, writeClaudeSession } from '../e2e/helpers.ts'
 import { memoryStorage } from '../memory-storage.ts'
 
 const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
@@ -13,12 +18,7 @@ const { run } = await import('../../src/cli.ts')
 async function machine(): Promise<Home> {
   const home = await tempHome()
   await logIn(home)
-  Object.assign(process.env, {
-    HOME: home.root,
-    CLAUDE_CONFIG_DIR: home.claude,
-    CODEX_HOME: home.codex,
-    ATTIC_NETWORK: 'calibration',
-  })
+  Object.assign(process.env, homeEnv(home), { ATTIC_NETWORK: 'calibration' })
   return home
 }
 
@@ -91,4 +91,29 @@ test('backup, setup, refresh and restore each print one JSON result', async () =
     resumeCommand: `claude --resume ${ID}`,
   })
   assert.match(restored.stderr, /✓ Restored session/)
+})
+
+test('a restore that fails inside the piece keeps the type of its cause: a newer piece asks for an update', async () => {
+  const home = await machine()
+  writeClaudeSession(home, ID)
+  await json(['backup', ID])
+  const pieceCid = indexEntry(ID)?.pieceCid
+  assert.ok(pieceCid)
+  // Replace the piece with a well-encrypted envelope of a content type this Attic does not know.
+  const { grant } = await openLogin('calibration')
+  const target = writeTarget(grant.grant, grant.key, SCOPE)
+  const salt = newSalt()
+  const photo = new TextEncoder().encode('photo')
+  const encrypt = fee.encrypt({
+    cek: pieceKey(target.key, salt),
+    contentLength: photo.length,
+    contentType: 'image/png',
+    appMetadata: pieceMetadata(target.ref, { salt, scope: SCOPE }),
+  })
+  storage.state.pieces.set(pieceCid, await new Response(ReadableStream.from([photo]).pipeThrough(encrypt)).bytes())
+
+  const { code, result } = await json(['restore', ID])
+  assert.equal(code, 1)
+  assert.deepEqual([result.error, result.retryable], ['update', false])
+  assert.match(String(result.message), /image\/png, not an Attic session.* Nothing was written\.$/)
 })

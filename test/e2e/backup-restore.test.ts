@@ -215,7 +215,7 @@ test('with --json, a failure is one JSON error on stdout saying what to fix and 
     const result = type === 'setup' ? runAttic(home, args) : runAttic(loggedIn, args, CALIBRATION)
     assert.equal(result.status, status, args.join(' '))
     const error = JSON.parse(result.stdout)
-    assert.deepEqual({ ...error, message: undefined }, { error: type, message: undefined, retryable: false })
+    assert.deepEqual([error.error, error.retryable], [type, false], args.join(' '))
     assert.ok(result.stderr.startsWith(`Error: ${error.message}\n`), result.stderr)
   }
   writeIndexEntry(loggedIn, writeClaudeSession(loggedIn, ID), { network: 'mainnet' })

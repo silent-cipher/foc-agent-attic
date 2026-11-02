@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseEnv } from 'node:util'
 import { isHex, parseUnits } from 'viem'
-import { type Readiness, type ReadinessResult, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
+import { type Readiness, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
 import { type Home, logIn, tempHome } from '../e2e/helpers.ts'
 import { makeGrant, STRANGER_KEY } from '../make-grant.ts'
 import { memoryStorage } from '../memory-storage.ts'
@@ -22,11 +22,13 @@ const ready: Readiness = {
   fundingUrl: 'https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration',
 }
 
-function report(changes: Partial<Readiness>): ReadinessResult & { text: string } {
+function report(changes: Partial<Readiness>): { code: number; text: string } {
   const lines: string[] = []
-  const result = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
-  return { ...result, text: lines.join('\n') }
+  const { code } = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
+  return { code, text: lines.join('\n') }
 }
+
+const readiness = (changes: Partial<Readiness>) => reportReadiness({ ...ready, ...changes }, () => undefined, NOW)
 
 test('a ready account exits 0 and names the earlier of the two expiries', () => {
   const { code, text } = report({})
@@ -65,8 +67,7 @@ test('low funds or no storage approval print the pre-filled funding link', () =>
 })
 
 test('the readiness result holds each check, the expiry once authorized and the links that fix what is missing', () => {
-  const { text: _, ...result } = report({})
-  assert.deepEqual(result, {
+  assert.deepEqual(readiness({}), {
     code: 0,
     authorized: true,
     storageApproved: true,
@@ -74,8 +75,7 @@ test('the readiness result holds each check, the expiry once authorized and the 
     expiresAt: '2027-01-25T08:00:00.000Z',
     approveUrl: ready.approveUrl,
   })
-  const { text: __, ...unready } = report({ authorizedUntil: 0, availableFunds: 0n })
-  assert.deepEqual(unready, {
+  assert.deepEqual(readiness({ authorizedUntil: 0, availableFunds: 0n }), {
     code: 2,
     needs: 'approval',
     authorized: false,
@@ -84,8 +84,7 @@ test('the readiness result holds each check, the expiry once authorized and the 
     approveUrl: ready.approveUrl,
     fundingUrl: ready.fundingUrl,
   })
-  const { text: ___, ...unapproved } = report({ storageApproved: false })
-  assert.deepEqual(unapproved, {
+  assert.deepEqual(readiness({ storageApproved: false }), {
     code: 2,
     needs: 'deposit',
     authorized: true,
