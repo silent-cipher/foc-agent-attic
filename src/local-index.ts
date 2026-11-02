@@ -135,7 +135,13 @@ function indexPath(): string {
 /** Reads the index, or an empty one when there is none. */
 function readIndex(path: string): Index {
   if (!existsSync(path)) return { sessions: {} }
-  const index = JSON.parse(readFileSync(path, 'utf8'))
+  const text = readFileSync(path, 'utf8')
+  let index: Index | undefined
+  try {
+    index = JSON.parse(text)
+  } catch {
+    // Cut short or hand-edited: refused below like any other file that is not an index.
+  }
   if (typeof index?.sessions !== 'object' || index.sessions === null) {
     throw new AtticError('conflict', `${path} is not an Attic index. Fix it, or move it away.`)
   }

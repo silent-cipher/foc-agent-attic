@@ -222,4 +222,10 @@ test('with --json, a failure is one JSON error on stdout saying what to fix and 
   const other = runAttic(loggedIn, ['restore', ID, '--json'], CALIBRATION)
   assert.equal(other.status, 1)
   assert.equal(JSON.parse(other.stdout).error, 'conflict')
+
+  writeFileSync(join(loggedIn.root, '.attic', 'index.json'), '{"sessions": {')
+  const truncated = runAttic(loggedIn, ['restore', ID, '--json'], CALIBRATION)
+  assert.equal(truncated.status, 1)
+  const { error, retryable } = JSON.parse(truncated.stdout)
+  assert.deepEqual([error, retryable], ['conflict', false])
 })

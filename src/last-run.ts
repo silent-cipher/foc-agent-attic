@@ -29,7 +29,13 @@ export function recordRun(run: LastRun): void {
 export function lastRun(): LastRun | undefined {
   const path = statusPath()
   if (!existsSync(path)) return undefined
-  const run: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  const text = readFileSync(path, 'utf8')
+  let run: unknown
+  try {
+    run = JSON.parse(text)
+  } catch {
+    // Cut short or hand-edited: refused below like any other file that is not a run status.
+  }
   if (!isLastRun(run)) throw new AtticError('conflict', `${path} is not an Attic run status. Fix it, or delete it.`)
   return run
 }
