@@ -4,8 +4,9 @@ Attic backs up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cl
 
 - Claude Code: `/plugin marketplace add silent-cipher/foc-agent-attic#release`, then `/plugin install attic@attic`.
 - Codex: `codex plugin marketplace add silent-cipher/foc-agent-attic --ref release`, then `codex plugin add attic@attic`.
+- CLI only: `npm install -g foc-agent-attic`, then `attic setup`. Run `attic --help` for every command.
 
-Then run `/attic:setup` (`$attic setup` in Codex) to log in. To update, run `/plugin marketplace update attic` in Claude Code or `codex plugin marketplace upgrade attic`.
+With the plugin, run `/attic:setup` (`$attic setup` in Codex) to log in. To update, run `/plugin marketplace update attic` in Claude Code or `codex plugin marketplace upgrade attic`.
 
 **Trade-offs**
 

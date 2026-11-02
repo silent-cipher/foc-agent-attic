@@ -14,7 +14,7 @@ Then, by exit code:
 
 - **0:** show the run counts or the session result as printed. If another run holds the lock, say this run was skipped; do not claim it backed anything up.
 - **2:** show what is printed and every link exactly as printed, and say what the user has to do: run `/attic:setup`, or deposit USDFC in the console. Sessions it did not back up were not uploaded. Offer to run the backup again once they have.
-- **1:** show the error. If it says to run `/attic:setup`, suggest it. A failed upload is safe to retry.
+- **1:** show the error. If it says to run `attic setup`, suggest `/attic:setup`. A failed upload is safe to retry.
 - **64:** the arguments were wrong. Show the error; don't run the same command again.
 
 Never print the contents of `~/.attic/session.env`.

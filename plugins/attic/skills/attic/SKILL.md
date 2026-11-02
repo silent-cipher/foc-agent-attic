@@ -30,6 +30,6 @@ If no description matches, the index is empty, or restore reports that an ID is 
 
 After restore, show the resume command exactly as printed (`codex resume <id>` or `claude --resume <id>`). If a local file differs, never move or delete it yourself; explain the CLI's error and let the user decide. A newer local session can be backed up instead.
 
-The CLI's `/attic:setup` and other `/attic:…` hints name Claude Code commands. In Codex, offer the corresponding operation through this skill, such as `$attic setup`, `$attic backup <id>` or `$attic refresh`.
+The CLI's `attic setup` and other `attic …` hints name its own commands. Offer the corresponding operation instead: in Codex through this skill, such as `$attic setup`, `$attic backup <id>` or `$attic refresh`; in Claude Code as `/attic:setup`, `/attic:backup <id>` or `/attic:refresh`.
 
 Never print `~/.attic/session.env` or ask for the wallet's private key. If the CLI bundle is missing, report that the plugin was installed without it: install a release (the marketplace's `release` ref), or run `pnpm install` and `pnpm build` in a source checkout; don't download or execute a substitute.

@@ -32,17 +32,17 @@ type SavedLogin = { sessionKey: Hex; network: Network; grant?: string }
 /**
  * Opens the saved login for `network`.
  *
- * @throws Saying to run `/attic:setup` when there is no usable login.
+ * @throws Saying to run `attic setup` when there is no usable login.
  */
 export async function openLogin(network: Network): Promise<Login> {
   const saved = readSavedLogin(loginPath(), network)
-  if (saved?.grant === undefined) throw new AtticError('setup', 'Attic is not logged in. Run /attic:setup first.')
+  if (saved?.grant === undefined) throw new AtticError('setup', 'Attic is not logged in. Run attic setup first.')
   try {
     return await open(saved, saved.grant)
   } catch (error) {
     throw new AtticError(
       'setup',
-      `${error instanceof Error ? error.message : String(error)} Run /attic:setup to log in again.`
+      `${error instanceof Error ? error.message : String(error)} Run attic setup to log in again.`
     )
   }
 }

@@ -55,7 +55,7 @@ test('backup before setup says to run setup', async () => {
   writeClaudeSession(home, ID)
   const result = runAttic(home, ['backup', ID])
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
+  assert.match(result.stderr, /^Error: Attic is not logged in\. Run attic setup first\./)
 })
 
 test('backup of a session the index already holds unchanged, for this login, uploads nothing', async () => {
@@ -123,7 +123,7 @@ test('restore of a session missing from the index suggests refresh and writes no
   assert.match(
     result.stderr,
     new RegExp(
-      `^Error: Session ${ID} is not in the Attic index\\. If another machine backed it up, run /attic:refresh, then restore again\\. Nothing was written\\.`
+      `^Error: Session ${ID} is not in the Attic index\\. If another machine backed it up, run attic refresh, then restore again\\. Nothing was written\\.`
     )
   )
   assert.equal(result.stdout, '')
@@ -134,7 +134,7 @@ test('refresh before setup says to run setup', async () => {
   const home = await tempHome()
   const result = runAttic(home, ['refresh'])
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
+  assert.match(result.stderr, /^Error: Attic is not logged in\. Run attic setup first\./)
   assert.equal(result.stdout, '')
 })
 
@@ -143,7 +143,7 @@ test('restore before setup says to run setup', async () => {
   writeIndexEntry(home, writeClaudeSession(home, ID))
   const result = runAttic(home, ['restore', ID])
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /^Error: Attic is not logged in\. Run \/attic:setup first\./)
+  assert.match(result.stderr, /^Error: Attic is not logged in\. Run attic setup first\./)
 })
 
 test('the CLI finds Codex rollouts under CODEX_HOME, skips unchanged backups and lists them offline', async () => {

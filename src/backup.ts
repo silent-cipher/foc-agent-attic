@@ -40,7 +40,7 @@ export type BackupResult = RunCounts & { locked?: true } & ({ code: 0 } | { code
 /**
  * Backs up one session now, or every session idle for 24 hours when no ID is supplied.
  * Skips sessions the index already holds unchanged, or newer, under this login's group key,
- * and records how the run ended for `/attic:sessions`.
+ * and records how the run ended for `attic sessions`.
  * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
  * @returns Code 0 when backed up, 1 when a session failed, 2 when the owner has something to do first.
@@ -119,7 +119,7 @@ async function run(
   })
   if (authorizedUntil <= Date.now() / 1000) {
     counts.failed += due.length
-    print(`✗ Session key not authorized by ${login.grant.owner}, or its authorization expired. Run /attic:setup.`)
+    print(`✗ Session key not authorized by ${login.grant.owner}, or its authorization expired. Run attic setup.`)
     return { code: 2, needs: 'setup' }
   }
 

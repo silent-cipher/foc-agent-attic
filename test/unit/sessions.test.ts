@@ -167,7 +167,7 @@ test('sessions shows how the last backup run ended', async () => {
   writeClaudeSession(home, OTHER)
   await backup(options(home), OTHER, printed().print, storage.connect)
   listing = await listed()
-  assert.match(listing.join('\n'), /UTC failed:\n {2}✗ Session key not authorized .* Run \/attic:setup\./)
+  assert.match(listing.join('\n'), /UTC failed:\n {2}✗ Session key not authorized .* Run attic setup\./)
 
   storage.state.authorizedUntil = 4102444800
   storage.state.storeError = new Error('commit timed out\nRequest body: …')
@@ -177,14 +177,14 @@ test('sessions shows how the last backup run ended', async () => {
 
 test('sessions warns from 7 days before the session key expires', async () => {
   await machine(await makeGrant({ expires: NOW + 7 * DAY }))
-  assert.ok((await listed()).includes('No sessions in the Attic index. Back one up with /attic:backup <session id>.'))
+  assert.ok((await listed()).includes('No sessions in the Attic index. Back one up with attic backup <session id>.'))
   assert.ok(
     (await listed(NOW + DAY)).includes(
-      '⚠ The session key expires on 2027-01-22 (in 6 days). Run /attic:setup to renew it.'
+      '⚠ The session key expires on 2027-01-22 (in 6 days). Run attic setup to renew it.'
     )
   )
   assert.ok(!(await listed(NOW - DAY)).some((line) => line.includes('session key')))
   assert.ok(
-    (await listed(NOW + 7 * DAY)).includes('✗ The session key expired on 2027-01-22. Run /attic:setup to log in again.')
+    (await listed(NOW + 7 * DAY)).includes('✗ The session key expired on 2027-01-22. Run attic setup to log in again.')
   )
 })

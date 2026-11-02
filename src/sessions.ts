@@ -18,8 +18,8 @@ export async function sessions(
   const all = indexEntries()
   const entries = matchingSessions(all, words)
   if (all.length === 0) {
-    print('No sessions in the Attic index. Back one up with /attic:backup <session id>.')
-    print('Backed up on another machine? Run /attic:refresh to add it to the index.')
+    print('No sessions in the Attic index. Back one up with attic backup <session id>.')
+    print('Backed up on another machine? Run attic refresh to add it to the index.')
   } else if (entries.length === 0) {
     print(`No sessions in the Attic index match ${words.join(' ')}.`)
   } else {
@@ -63,10 +63,10 @@ export async function sessions(
   }
   const date = new Date(expires * 1000).toISOString().slice(0, 10)
   if (expires <= now) {
-    print(`✗ The session key expired on ${date}. Run /attic:setup to log in again.`)
+    print(`✗ The session key expired on ${date}. Run attic setup to log in again.`)
   } else if (expires - now <= WARN_DAYS * 86_400) {
     const days = Math.floor((expires - now) / 86_400)
-    print(`⚠ The session key expires on ${date} (in ${days} days). Run /attic:setup to renew it.`)
+    print(`⚠ The session key expires on ${date} (in ${days} days). Run attic setup to renew it.`)
   }
   return 0
 }

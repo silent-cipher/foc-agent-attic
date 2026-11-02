@@ -31,7 +31,7 @@ export async function restore(
   if (entry === undefined) {
     throw new AtticError(
       'not_found',
-      `Session ${id} is not in the Attic index. If another machine backed it up, run /attic:refresh, then restore again. Nothing was written.`
+      `Session ${id} is not in the Attic index. If another machine backed it up, run attic refresh, then restore again. Nothing was written.`
     )
   }
   const agent = options.agents.find((candidate) => candidate.name === entry.agent)
@@ -90,7 +90,7 @@ export function writeSessionFiles(home: string, files: readonly SessionFile[]): 
       throw new AtticError(
         'conflict',
         `${target} is newer than the backup: the session was used after it was backed up. ` +
-          'Nothing was written. Resume it as it is, or run /attic:backup with its ID to back up the newer version.'
+          'Nothing was written. Resume it as it is, or run attic backup with its ID to back up the newer version.'
       )
     }
     throw new AtticError(

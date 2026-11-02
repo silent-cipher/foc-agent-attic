@@ -11,7 +11,7 @@
       "include-v-in-tag": true,
       "include-component-in-tag": false,
       "pull-request-header": "📦 Release Preparation",
-      "pull-request-footer": "\n\n## 🚀 How to Release\n\n1. **Review** the changelog and version bump in this PR\n2. **Merge this PR** to trigger the release\n3. After merging, the workflow will:\n   - Run CI and the calibnet suite on the merge commit\n   - Create a GitHub release and its tag\n   - Publish the plugin with its built bundle to the `release` branch\n\n⚠️ **Note**: The release has NOT been created yet. It will only be created after you merge this PR and both checks pass.",
+      "pull-request-footer": "\n\n## 🚀 How to Release\n\n1. **Review** the changelog and version bump in this PR\n2. **Merge this PR** to trigger the release\n3. After merging, the workflow will:\n   - Run CI and the calibnet suite on the merge commit\n   - Create a GitHub release and its tag\n   - Publish the CLI to npm and the plugin with its built bundle to the `release` branch\n\n⚠️ **Note**: The release has NOT been created yet. It will only be created after you merge this PR and both checks pass.",
       "changelog-sections": [
         { "type": "feat", "section": "Features", "hidden": false },
         { "type": "fix", "section": "Bug Fixes", "hidden": false },

@@ -143,9 +143,9 @@ test('sessions shows a failed backup run and that Attic is not logged in', async
   assert.match(result.stdout, /^No sessions in the Attic index\./)
   assert.match(
     result.stdout,
-    /\nLast run \d{4}-\d\d-\d\d \d\d:\d\d UTC failed:\n {2}✗ Attic is not logged in\. Run \/attic:setup first\.\n/
+    /\nLast run \d{4}-\d\d-\d\d \d\d:\d\d UTC failed:\n {2}✗ Attic is not logged in\. Run attic setup first\.\n/
   )
-  assert.match(result.stdout, /\n✗ Attic is not logged in\. Run \/attic:setup first\.\n$/)
+  assert.match(result.stdout, /\n✗ Attic is not logged in\. Run attic setup first\.\n$/)
 })
 
 test('a status file that is not a run status, or not even JSON, is refused, not shown', async () => {
