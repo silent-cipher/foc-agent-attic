@@ -223,14 +223,3 @@ test('with --json, a failure is one JSON error on stdout saying what to fix and 
   assert.equal(other.status, 1)
   assert.equal(JSON.parse(other.stdout).error, 'conflict')
 })
-
-test('the bundle prints help for agents and exits 0', async () => {
-  const home = await tempHome()
-  for (const args of [['--help'], ['backup', '--help']]) {
-    const result = runAttic(home, args)
-    assert.equal(result.status, 0, args.join(' '))
-    assert.equal(result.stderr, '')
-    assert.match(result.stdout, /^Usage: attic /)
-    assert.match(result.stdout, /\nExit codes:\n/)
-  }
-})

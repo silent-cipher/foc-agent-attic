@@ -76,12 +76,8 @@ export type Readiness = Account & {
   fundingUrl: string
 }
 
-/**
- * The checks, when the key expires if it is authorized, and the console links that fix what is missing:
- * code 0 when every check passed, else 2.
- */
-export type ReadinessResult = {
-  code: 0 | 2
+/** The checks, when the key expires if it is authorized, and the console links that fix what is missing. */
+type Checks = {
   authorized: boolean
   storageApproved: boolean
   funded: boolean
@@ -89,6 +85,12 @@ export type ReadinessResult = {
   approveUrl: string
   fundingUrl?: string
 }
+
+/**
+ * Code 0 when every check passed, else 2 with what the owner does first: approve the key, then deposit.
+ * `fundingUrl` is set whenever a deposit is needed too.
+ */
+export type ReadinessResult = Checks & ({ code: 0 } | { code: 2; needs: 'approval' | 'deposit' })
 
 /** Prints the readiness checklist and the console links that fix what is missing. */
 export function reportReadiness(
@@ -98,8 +100,7 @@ export function reportReadiness(
 ): ReadinessResult {
   const authorized = r.authorizedUntil > now
   const funding = checkFunding({ ...r, depositNeeded: 0n })
-  const result: ReadinessResult = {
-    code: authorized && funding.ready ? 0 : 2,
+  const checks: Checks = {
     authorized,
     storageApproved: r.storageApproved,
     funded: funding.funded,
@@ -110,17 +111,18 @@ export function reportReadiness(
   if (authorized) {
     const expires = Math.min(r.authorizedUntil, r.grantExpires)
     const days = Math.floor((expires - now) / 86_400)
-    result.expiresAt = new Date(expires * 1000).toISOString()
-    print(`Session key expires ${result.expiresAt.slice(0, 10)} (in ${days} days).`)
+    checks.expiresAt = new Date(expires * 1000).toISOString()
+    print(`Session key expires ${checks.expiresAt.slice(0, 10)} (in ${days} days).`)
     print('To renew it before then, approve it again in the console and run setup with the new Grant:')
   } else {
     print('Approve this session key in the Filecoin Cloud console:')
   }
   print(r.approveUrl)
   if (!funding.ready) {
-    result.fundingUrl = r.fundingUrl
+    checks.fundingUrl = r.fundingUrl
     print('Deposit USDFC and approve the storage service in one step:')
     print(r.fundingUrl)
   }
-  return result
+  if (authorized && funding.ready) return { code: 0, ...checks }
+  return { code: 2, needs: authorized ? 'deposit' : 'approval', ...checks }
 }

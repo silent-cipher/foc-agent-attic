@@ -25,11 +25,17 @@ const IDLE_MS = 24 * 60 * 60 * 1000
 /** A session the run uploads, and its bytes before encryption. */
 type Due = { agent: Agent; id: string; bytes: number }
 
-/** How a run ended: 2 when the owner has to run setup again or deposit USDFC in the console first. */
-type Ending = { code: 0 | 1 } | { code: 2; needs: 'setup' } | { code: 2; needs: 'deposit'; fundingUrl: string }
+/** Code 2: the owner has to run setup again or deposit USDFC in the console first. */
+type Needs = { code: 2; needs: 'setup' } | { code: 2; needs: 'deposit'; fundingUrl: string }
 
-/** How a backup ended, with the run's counts; `locked` when another backup held the lock and nothing ran. */
-export type BackupResult = RunCounts & Ending & { locked?: true }
+/** How a run ended: 1 when a session or the removal of old pieces failed. */
+type Ending = { code: 0 } | { code: 1 } | Needs
+
+/**
+ * How a backup ended, with the run's counts; `locked` when another backup held the lock and nothing ran.
+ * A failed run carries the ✗ lines it printed as its message.
+ */
+export type BackupResult = RunCounts & { locked?: true } & ({ code: 0 } | { code: 1; message: string } | Needs)
 
 /**
  * Backs up one session now, or every session idle for 24 hours when no ID is supplied.
@@ -63,7 +69,8 @@ export async function backup(
     if (id === undefined)
       tee(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
     recordRun({ finishedAt: new Date().toISOString(), ok: ending.code === 0, lines, counts })
-    return { ...counts, ...ending }
+    if (ending.code !== 1) return { ...counts, ...ending }
+    return { ...counts, code: 1, message: lines.filter((line) => line.startsWith('✗')).join('\n') }
   } catch (error) {
     recordRun({ finishedAt: new Date().toISOString(), ok: false, lines: [...lines, `✗ ${firstLine(error)}`], counts })
     throw error

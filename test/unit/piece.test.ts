@@ -84,10 +84,10 @@ test("another owner's Grant cannot open a piece", async () => {
 })
 
 test('an envelope of another content type is refused', async () => {
-  await assert.rejects(
-    openPiece(await grantFor(), await encryptRaw(new TextEncoder().encode('photo'), 'image/png')),
-    /does not decrypt: it is image\/png, not an Attic session/
-  )
+  await assert.rejects(openPiece(await grantFor(), await encryptRaw(new TextEncoder().encode('photo'), 'image/png')), {
+    type: 'update',
+    message: /does not decrypt: it is image\/png, not an Attic session/,
+  })
 })
 
 test('a changed byte fails its SHA-256 check', async () => {
@@ -113,10 +113,10 @@ test('a cut-short or padded piece is damaged', async () => {
 })
 
 test('a header from a newer format asks for an Attic update', async () => {
-  await assert.rejects(
-    openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, v: 2, files: [] }))),
-    /format 2, newer than this Attic. Update Attic/
-  )
+  await assert.rejects(openPiece(await grantFor(), await encryptRaw(plaintext({ ...FIELDS, v: 2, files: [] }))), {
+    type: 'update',
+    message: /format 2, newer than this Attic. Update Attic/,
+  })
 })
 
 test('a header without the session fields is refused', async () => {

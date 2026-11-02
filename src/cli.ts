@@ -4,7 +4,7 @@ import pkg from '../package.json' with { type: 'json' }
 import { type BackupOptions, backup } from './backup.ts'
 import { claudeCode, claudeHome } from './claude-code.ts'
 import { codex, codexHome } from './codex.ts'
-import { AtticError } from './errors.ts'
+import { AtticError, type FixFirst } from './errors.ts'
 import { indexEntries, refreshIndex } from './local-index.ts'
 import { openLogin } from './login.ts'
 import { restore } from './restore.ts'
@@ -19,16 +19,15 @@ const USAGE_ERROR = 64
 
 const EXIT_CODES = `Exit codes:
   0   Done.
-  1   Failed. With --json, stdout holds {"error", "message", "retryable"}, where error is setup (run attic setup),
-      not_found (refresh the index, or check the ID), conflict (a person has to move or fix local files), or failed.
+  1   Failed. With --json, stdout holds {"error", "message", "retryable"}; a backup run adds its counts. error is
+      setup (run attic setup), not_found (refresh the index, or check the ID), update (update Attic), conflict
+      (local files or the login don't match the backup, so a person has to move, fix or switch them), or failed.
       Only failed can go away on a retry; every command is safe to retry.
   2   The owner has to act first: paste a Grant, approve the session key, or deposit USDFC in the console.
   64  Usage error: fix the command. With --json, error is usage.
 `
 
-const ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
-
-const JSON_OPTION = '  --json  Print one JSON result on stdout, and progress on stderr:'
+const EXAMPLE_ID = '5d1c3e0a-7b2f-4c8e-9a61-0f3b2d4e6a80'
 
 const COMMANDS = {
   setup: {
@@ -41,10 +40,11 @@ it. On a machine without an index, setup also builds it from the backups on chai
 
 Options:
   --grant <fgr1_…>  Optional. The Grant the console showed.
-${JSON_OPTION}
-            {"needs": "grant", "sessionAddress", "approveUrl"} while no Grant is saved, else the checks
-            {"authorized", "storageApproved", "funded", "expiresAt", "approveUrl", "fundingUrl", "refresh"}:
-            expiresAt once authorized, fundingUrl until funded and approved, refresh when it built the index.
+  --json            Print one JSON result on stdout, and progress on stderr: {"needs": "grant", "sessionAddress",
+                    "approveUrl"} while no Grant is saved, else the checks {"needs", "authorized",
+                    "storageApproved", "funded", "expiresAt", "approveUrl", "fundingUrl", "refresh"}. needs is
+                    approval or deposit until every check passes, expiresAt is set once authorized, fundingUrl
+                    until funded and approved, and refresh when setup built the index.
 
 Example:
   attic setup --grant fgr1_…
@@ -63,13 +63,13 @@ Arguments:
 
 Options:
   --current  Back up the session Attic runs in, from CLAUDE_SESSION_ID or CODEX_THREAD_ID. Not with an ID.
-${JSON_OPTION}
-            {"backedUp", "skipped", "failed"}, with "locked": true when another backup held the lock,
-            "needs": "setup" when the session key isn't authorized, or "needs": "deposit" and "fundingUrl"
-            when USDFC is short.
+  --json     Print one JSON result on stdout, and progress on stderr: {"backedUp", "skipped", "failed"}, with
+             "locked": true when another backup held the lock, "needs": "setup" when the session key isn't
+             authorized, "needs": "deposit" and "fundingUrl" when USDFC is short, or, when a session or the
+             removal of old pieces failed, "error": "failed", "retryable": true and the ✗ lines as "message".
 
 Example:
-  attic backup ${ID} --json
+  attic backup ${EXAMPLE_ID} --json
 `,
   },
   restore: {
@@ -83,11 +83,11 @@ Arguments:
   <session id>  Required. A session ID from attic sessions.
 
 Options:
-${JSON_OPTION}
-            {"sessionId", "agent", "written", "files", "resumeCommand"}.
+  --json  Print one JSON result on stdout, and progress on stderr:
+          {"sessionId", "agent", "written", "files", "resumeCommand"}.
 
 Example:
-  attic restore ${ID} --json
+  attic restore ${EXAMPLE_ID} --json
 `,
   },
   sessions: {
@@ -118,8 +118,8 @@ Adds the sessions other machines backed up to this machine's index. Reads the ch
 whose header can't be read now is skipped, and the next refresh tries it again.
 
 Options:
-${JSON_OPTION}
-            {"added", "updated", "sessions", "skippedPieces": [{"pieceCid", "error"}]}.
+  --json  Print one JSON result on stdout, and progress on stderr:
+          {"added", "updated", "sessions", "skippedPieces": [{"pieceCid", "error"}]}.
 
 Example:
   attic refresh --json
@@ -177,7 +177,7 @@ export async function run(args: readonly string[], stdout: Write, stderr: Write)
     const help = known ? `attic ${name} --help for its arguments` : 'attic --help for the commands'
     const hint = type === 'usage' ? `\nRun ${help}.` : ''
     stderr(`Error: ${message}${hint}\n`)
-    if (json) stdout(`${JSON.stringify({ error: type, message, retryable: type === 'failed' })}\n`)
+    if (json) stdout(`${JSON.stringify(failure(type, message))}\n`)
     return type === 'usage' ? USAGE_ERROR : 1
   }
 }
@@ -239,10 +239,18 @@ async function command(
     agents = agents.filter((agent) => agent.name === (claude ? 'claude-code' : 'codex'))
   }
   const id = positionals.length === 0 ? undefined : sessionId(positionals)
-  return ended(await backup({ ...options, agents }, id, print, synapseStorage))
+  const outcome = await backup({ ...options, agents }, id, print, synapseStorage)
+  if (outcome.code !== 1) return ended(outcome)
+  const { code, ...result } = outcome
+  return { code, result: { ...failure('failed', outcome.message), ...result } }
 }
 
 const ended = ({ code, ...result }: { code: number }) => ({ code, result })
+
+/** What --json prints for a failure: its type, and whether running the same command again can help. */
+function failure(type: FixFirst | 'failed', message: string) {
+  return { error: type, message, retryable: type === 'failed' }
+}
 
 function isCommand(name: string | undefined): name is Command {
   return name !== undefined && Object.hasOwn(COMMANDS, name)

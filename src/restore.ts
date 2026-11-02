@@ -36,7 +36,9 @@ export async function restore(
     )
   }
   const agent = options.agents.find((candidate) => candidate.name === entry.agent)
-  if (agent === undefined) throw new Error(`Session ${id} is a ${entry.agent} session; update Attic to restore it.`)
+  if (agent === undefined) {
+    throw new AtticError('update', `Session ${id} is a ${entry.agent} session; update Attic to restore it.`)
+  }
   const login = await openLogin(options.network)
   if (!sameKeyholder(entry, login.keyholder)) {
     throw new AtticError(
@@ -48,7 +50,8 @@ export async function restore(
   print(`Downloading piece ${entry.pieceCid} (${entry.size} bytes) on ${options.network}`)
   const envelope = await connect(login, print).download(entry.pieceCid)
   const { header, files } = await openPiece(login.grant, envelope).catch((error: unknown) => {
-    throw new Error(`${error instanceof Error ? error.message : String(error)} Nothing was written.`, { cause: error })
+    const message = `${error instanceof Error ? error.message : String(error)} Nothing was written.`
+    throw error instanceof AtticError ? new AtticError(error.type, message) : new Error(message, { cause: error })
   })
   if (header.sessionId !== id) {
     throw new Error(`The piece for ${id} holds session ${header.sessionId}. Nothing was written.`)

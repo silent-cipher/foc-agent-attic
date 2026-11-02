@@ -77,9 +77,21 @@ test('the readiness result holds each check, the expiry once authorized and the 
   const { text: __, ...unready } = report({ authorizedUntil: 0, availableFunds: 0n })
   assert.deepEqual(unready, {
     code: 2,
+    needs: 'approval',
     authorized: false,
     storageApproved: true,
     funded: false,
+    approveUrl: ready.approveUrl,
+    fundingUrl: ready.fundingUrl,
+  })
+  const { text: ___, ...unapproved } = report({ storageApproved: false })
+  assert.deepEqual(unapproved, {
+    code: 2,
+    needs: 'deposit',
+    authorized: true,
+    storageApproved: false,
+    funded: true,
+    expiresAt: '2027-01-25T08:00:00.000Z',
     approveUrl: ready.approveUrl,
     fundingUrl: ready.fundingUrl,
   })

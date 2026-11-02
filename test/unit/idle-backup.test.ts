@@ -137,6 +137,7 @@ test('failed sessions retain their old piece while successful replacements remov
   }
   assert.deepEqual(await backup(f.options, undefined, f.print, connect), {
     code: 1,
+    message: `✗ Session ${OTHER}: provider failed`,
     backedUp: 1,
     skipped: 0,
     failed: 1,
@@ -147,6 +148,26 @@ test('failed sessions retain their old piece while successful replacements remov
   assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 0, failed: 1 })
   assert.equal((await backup(f.options, undefined, f.print, f.connect)).code, 0)
   assert.deepEqual(lastRun()?.counts, { backedUp: 1, skipped: 1, failed: 0 })
+})
+
+test('a failed removal of the old piece fails the run with its reason, though nothing failed to back up', async () => {
+  const f = await fixture()
+  const paths = writeClaudeSession(f.home, ID)
+  await backup(f.options, ID, f.print, f.connect)
+  appendFileSync(join(f.home.claude, paths[0] ?? ''), '{}\n')
+  const connect: Connect = (login, print) => ({
+    ...f.connect(login, print),
+    scheduleRemoval: async () => {
+      throw new Error('removal reverted')
+    },
+  })
+  assert.deepEqual(await backup(f.options, ID, f.print, connect), {
+    code: 1,
+    message: '✗ Old pieces remain stored: removal reverted',
+    backedUp: 1,
+    skipped: 0,
+    failed: 0,
+  })
 })
 
 test('a malformed session does not stop another session, and a failed listing releases the lock', async () => {

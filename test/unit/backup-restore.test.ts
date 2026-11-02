@@ -146,6 +146,17 @@ test('an account short of funds uploads nothing and prints the funding link', as
   assert.equal(storage.state.pieces.size, 0)
 })
 
+test('a session of an agent this Attic does not know asks for an update, not a retry', async () => {
+  const home = await loggedInHome()
+  const storage = memoryStorage()
+  writeClaudeSession(home, ID)
+  await backup(options(home), ID, printed().print, storage.connect)
+  await assert.rejects(restore({ ...options(home), agents: [] }, ID, printed().print, storage.connect), {
+    type: 'update',
+    message: `Session ${ID} is a claude-code session; update Attic to restore it.`,
+  })
+})
+
 test("restore refuses a piece that holds another session's files and writes nothing", async () => {
   const home = await loggedInHome()
   const storage = memoryStorage()
