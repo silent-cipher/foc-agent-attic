@@ -216,7 +216,7 @@ test('restore of a session missing from the index suggests refresh, without netw
   }
   await assert.rejects(
     restore(options(home), ID, () => undefined, offline),
-    new RegExp(`^Error: Session ${ID} is not in the Attic index\\. .*run /attic:refresh.* Nothing was written\\.$`)
+    new RegExp(`^Error: Session ${ID} is not in the Attic index\\. .*run attic refresh.* Nothing was written\\.$`)
   )
   assert.equal(existsSync(home.claude), false)
 })

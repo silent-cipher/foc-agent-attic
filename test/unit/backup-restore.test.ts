@@ -120,7 +120,7 @@ test('an unauthorized session key uploads nothing and says to run setup', async 
     skipped: 0,
     failed: 1,
   })
-  assert.match(output.lines.join('\n'), /✗ Session key not authorized .* Run \/attic:setup/)
+  assert.match(output.lines.join('\n'), /✗ Session key not authorized .* Run attic setup/)
   assert.equal(storage.state.pieces.size, 0)
   assert.equal(indexEntry(ID), undefined)
 })

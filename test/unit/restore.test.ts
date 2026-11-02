@@ -50,7 +50,7 @@ test('a local transcript that grew since the backup is newer: nothing is written
   writeFileSync(join(root, TRANSCRIPT.path), 'transcript and more messages')
   assert.throws(
     () => writeSessionFiles(root, [TRANSCRIPT, SUBAGENT]),
-    /s1\.jsonl is newer than the backup.*\/attic:backup/
+    /s1\.jsonl is newer than the backup.*attic backup/
   )
   assert.equal(existsSync(join(root, SUBAGENT.path)), false)
   assert.equal(readFileSync(join(root, TRANSCRIPT.path), 'utf8'), 'transcript and more messages')

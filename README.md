@@ -1,10 +1,10 @@
 # Agent Attic
 
-A Claude Code and Codex plugin that backs up agent sessions, encrypted, to Filecoin Onchain Cloud.
+A Claude Code and Codex plugin, and a CLI, that back up agent sessions, encrypted, to Filecoin Onchain Cloud.
 
 ## Install
 
-Attic needs Node 24 or newer and stores backups on mainnet only. Each release publishes the plugin, with its built CLI, to the `release` branch.
+Attic needs Node 24 or newer and stores backups on mainnet only. Each release publishes the plugin, with its built CLI, to the `release` branch, and the same CLI to npm as `foc-agent-attic`.
 
 In Claude Code:
 
@@ -21,6 +21,15 @@ codex plugin add attic@attic
 ```
 
 Then run `/attic:setup` (`$attic setup` in Codex). To update, run `/plugin marketplace update attic` in Claude Code (or enable auto-update for the marketplace in `/plugin`), or `codex plugin marketplace upgrade attic`.
+
+To use the CLI without an agent, for example from cron or on a headless machine:
+
+```sh
+npm install -g foc-agent-attic
+attic setup
+```
+
+Or run it without installing: `npx foc-agent-attic backup`. `attic --help` lists every command. The CLI and the plugin share `~/.attic`, so either can back up and restore what the other did.
 
 While the repository is private, git on your machine needs access to it, for example through `gh auth login` and `gh auth setup-git`.
 
@@ -53,9 +62,11 @@ Then run `/attic:version`, or `/attic:setup` to log in, then `/attic:backup <ses
 
 ### Releasing
 
-[release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps the version in `package.json` and both plugin manifests and updates `CHANGELOG.md` from the conventional commit titles merged to `main`. Merging it releases: on that push, the **release-please** workflow runs CI and the calibnet suite on the merge commit, and only once both pass does it tag `vX.Y.Z`, publish the GitHub release with `.github/release-notes.md` above the changelog, build the bundle and push it to the `release` branch. Other pushes to `main` only update the release PR, and never tag an earlier release PR.
+[release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps the version in `package.json` and both plugin manifests and updates `CHANGELOG.md` from the conventional commit titles merged to `main`. Merging it releases: on that push, the **release-please** workflow runs CI and the calibnet suite on the merge commit, and only once both pass does it tag `vX.Y.Z`, publish the GitHub release with `.github/release-notes.md` above the changelog, build the bundle, publish it to npm and push it to the `release` branch. Other pushes to `main` only update the release PR, and never tag an earlier release PR.
 
-If a check fails on a release merge, nothing is tagged. For a flaky failure, re-run the failed jobs of that run. For a real one, fix it on `main`, then remove the `autorelease: pending` label from the merged release PR so release-please opens a new one with the fix; check the version it proposes. If publishing fails after the tag exists, dispatch the workflow on that tag to publish it again (`dry_run` checks it without pushing).
+If a check fails on a release merge, nothing is tagged. For a flaky failure, re-run the failed jobs of that run. For a real one, fix it on `main`, then remove the `autorelease: pending` label from the merged release PR so release-please opens a new one with the fix; check the version it proposes. If publishing fails after the tag exists, dispatch the workflow on that tag to publish it again (`dry_run` checks it without pushing); a version already on npm is skipped.
+
+npm publishes through [trusted publishing](https://docs.npmjs.com/trusted-publishers): the package's trusted publisher on npmjs.com is this repository's `release-please.yml` workflow, so no npm token is stored. npm only accepts a trusted publisher for a package that exists, so the first release's npm step fails and pushes nothing. Publish that version by hand from its tag (`pnpm install`, `pnpm build`, `npm publish`), add the trusted publisher, then dispatch the workflow on the tag to push the `release` branch.
 
 ## Logging in
 
@@ -107,7 +118,7 @@ The same backup, sessions and restore operations also handle Codex rollouts unde
 
 Codex sessions show their latest `thread_name` from `session_index.jsonl`, else their first `user_message` event, shortened. The branch comes from `session_meta.payload.git.branch`. These fields are saved in the encrypted header and searchable with `sessions <words>`. A missing or unreadable title index leaves the title out; the index itself is never backed up. Renaming an unchanged rollout does not upload it again: the title updates when the rollout next changes and is backed up.
 
-Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic refresh`, `$attic restore <session id>` or `$attic version`. The CLI's `/attic:…` hints refer to the equivalent Claude Code commands.
+Codex's [documented plugin components](https://developers.openai.com/plugins/build/plugins) include skills, with no documented equivalent of Claude Code's `commands/` directory. The fallback for #4 is the bundled `$attic` skill: use `$attic setup`, `$attic backup <session id>`, `$attic sessions`, `$attic refresh`, `$attic restore <session id>` or `$attic version`. The CLI's `attic …` hints name the same operations as these skill calls and the Claude Code commands.
 
 For local development, run `pnpm install` and `pnpm build` first. Add the checkout as a local marketplace:
 
