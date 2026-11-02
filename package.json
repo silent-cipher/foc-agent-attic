@@ -6,6 +6,7 @@
     "type": "git",
     "url": "git+https://github.com/silent-cipher/foc-agent-attic.git"
   },
+  "license": "Apache-2.0 OR MIT",
   "bin": {
     "attic": "plugins/attic/dist/attic.mjs"
   },

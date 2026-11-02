@@ -8,6 +8,7 @@
     "url": "https://github.com/silent-cipher"
   },
   "repository": "https://github.com/silent-cipher/foc-agent-attic",
+  "license": "Apache-2.0 OR MIT",
   "keywords": [
     "filecoin",
     "backup",
