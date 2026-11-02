@@ -14,6 +14,7 @@ Then, by exit code:
 - **2 after the readiness checklist:** show the checklist and every link exactly as printed, and say what the user still has to do in the console. Offer to run setup again once they have.
 - **0:** show the checklist, the expiry date and the renewal link. Attic is ready. If the user wants to renew, ask them to open the link, approve with their wallet, and paste the new Grant here; then run setup again with `--grant <Grant>`. The session key stays the same.
 - **1:** show the error. If a Grant was refused, ask the user to copy it again from the console.
+- **64:** the arguments were wrong. Show the error; don't run the same command again.
 
 On a machine without an index, setup also builds it from the backups on chain, after the checklist and whatever the exit code. Show the `✓ Index refreshed: …` line and any `✗ Skipped piece` lines, and suggest `/attic:sessions` to list what was found.
 

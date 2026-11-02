@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { Agent } from './agent.ts'
+import { AtticError } from './errors.ts'
 import { indexEntry } from './local-index.ts'
 import { type Keyholder, type Network, openLogin, sameKeyholder } from './login.ts'
 import { openPiece, type SessionFile } from './piece.ts'
@@ -11,16 +12,26 @@ export type RestoreOptions = { network: Network; agents: readonly Agent[] }
 /**
  * Downloads a session's newest backup, checks it, and writes its files back into its agent's home folder.
  * Nothing is written unless the piece decrypts and every file matches its SHA-256 and passes `writeSessionFiles`' checks.
+ *
+ * @returns How many of the session's files were written, and the command that resumes it.
  */
 export async function restore(
   options: RestoreOptions,
   id: string,
   print: (line: string) => void,
   connect: Connect
-): Promise<number> {
+): Promise<{
+  code: 0
+  sessionId: string
+  agent: Agent['name']
+  written: number
+  files: number
+  resumeCommand: string
+}> {
   const entry = indexEntry(id)
   if (entry === undefined) {
-    throw new Error(
+    throw new AtticError(
+      'not_found',
       `Session ${id} is not in the Attic index. If another machine backed it up, run /attic:refresh, then restore again. Nothing was written.`
     )
   }
@@ -28,7 +39,8 @@ export async function restore(
   if (agent === undefined) throw new Error(`Session ${id} is a ${entry.agent} session; update Attic to restore it.`)
   const login = await openLogin(options.network)
   if (!sameKeyholder(entry, login.keyholder)) {
-    throw new Error(
+    throw new AtticError(
+      'conflict',
       `Session ${id} is backed up under ${describe(entry)}, but this login is for ${describe(login.keyholder)}. ` +
         'It cannot decrypt that backup. Nothing was written.'
     )
@@ -50,9 +62,10 @@ export async function restore(
       ? `✓ Session ${id} is already here, identical to its backup.`
       : `✓ Restored session ${id}: ${written} of ${files.length} files written to ${agent.home}`
   )
+  const resumeCommand = agent.resumeCommand(id)
   print('Resume it from any folder with:')
-  print(agent.resumeCommand(id))
-  return 0
+  print(resumeCommand)
+  return { code: 0, sessionId: id, agent: agent.name, written, files: files.length, resumeCommand }
 }
 
 /**
@@ -73,12 +86,14 @@ export function writeSessionFiles(home: string, files: readonly SessionFile[]): 
     if (local.equals(bytes)) return []
     // Transcripts only grow, so a local file that starts with the backup's bytes was used after the backup.
     if (local.length > bytes.length && local.subarray(0, bytes.length).equals(bytes)) {
-      throw new Error(
+      throw new AtticError(
+        'conflict',
         `${target} is newer than the backup: the session was used after it was backed up. ` +
           'Nothing was written. Resume it as it is, or run /attic:backup with its ID to back up the newer version.'
       )
     }
-    throw new Error(
+    throw new AtticError(
+      'conflict',
       `${target} already exists and differs from the backup. Move it away to restore. Nothing was written.`
     )
   })

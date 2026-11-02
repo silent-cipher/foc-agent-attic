@@ -2,6 +2,7 @@ import { linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import type { Agent, AgentSession } from './agent.ts'
+import { AtticError } from './errors.ts'
 import { checkFunding, fundingUrl } from './funding.ts'
 import { type RunCounts, recordRun } from './last-run.ts'
 import { hasNewer, type IndexEntry, indexEntry, isUpToDate, recordEntry, refreshIndex } from './local-index.ts'
@@ -24,26 +25,32 @@ const IDLE_MS = 24 * 60 * 60 * 1000
 /** A session the run uploads, and its bytes before encryption. */
 type Due = { agent: Agent; id: string; bytes: number }
 
+/** How a run ended: 2 when the owner has to run setup again or deposit USDFC in the console first. */
+type Ending = { code: 0 | 1 } | { code: 2; needs: 'setup' } | { code: 2; needs: 'deposit'; fundingUrl: string }
+
+/** How a backup ended, with the run's counts; `locked` when another backup held the lock and nothing ran. */
+export type BackupResult = RunCounts & Ending & { locked?: true }
+
 /**
  * Backs up one session now, or every session idle for 24 hours when no ID is supplied.
  * Skips sessions the index already holds unchanged, or newer, under this login's group key,
  * and records how the run ended for `/attic:sessions`.
  * The index entry is written only once the piece is committed, so a failure leaves the session to retry.
  *
- * @returns 0 when backed up, 1 when a session failed, 2 when the owner has something to do in the console.
+ * @returns Code 0 when backed up, 1 when a session failed, 2 when the owner has something to do first.
  */
 export async function backup(
   options: BackupOptions,
   id: string | undefined,
   print: (line: string) => void,
   connect: Connect
-): Promise<number> {
+): Promise<BackupResult> {
   const folder = join(homedir(), '.attic')
   mkdirSync(folder, { recursive: true, mode: 0o700 })
   const lock = join(folder, 'backup.lock')
   if (!takeLock(lock, print)) {
     print(`Another backup holds ${lock}; skipping this run.`)
-    return 0
+    return { code: 0, backedUp: 0, skipped: 0, failed: 0, locked: true }
   }
   const counts: RunCounts = { backedUp: 0, skipped: 0, failed: 0 }
   const lines: string[] = []
@@ -52,11 +59,11 @@ export async function backup(
     print(line)
   }
   try {
-    const code = await run(options, id, tee, connect, counts)
+    const ending = await run(options, id, tee, connect, counts)
     if (id === undefined)
       tee(`✓ Backup run: ${counts.backedUp} backed up, ${counts.skipped} skipped, ${counts.failed} failed`)
-    recordRun({ finishedAt: new Date().toISOString(), ok: code === 0, lines, counts })
-    return code
+    recordRun({ finishedAt: new Date().toISOString(), ok: ending.code === 0, lines, counts })
+    return { ...counts, ...ending }
   } catch (error) {
     recordRun({ finishedAt: new Date().toISOString(), ok: false, lines: [...lines, `✗ ${firstLine(error)}`], counts })
     throw error
@@ -71,7 +78,7 @@ async function run(
   print: (line: string) => void,
   connect: Connect,
   counts: RunCounts
-): Promise<number> {
+): Promise<Ending> {
   const named = id === undefined ? undefined : findSession(options.agents, id)
   const login = await openLogin(options.network)
   const started = Date.now()
@@ -87,16 +94,16 @@ async function run(
     if (previous !== undefined && isUpToDate(previous, login.keyholder, fileEntries(session.files))) {
       counts.skipped++
       print(`✓ Session ${id} is already backed up, unchanged since ${previous.lastWriteAt}.`)
-      return 0
+      return { code: 0 }
     }
     if (previous !== undefined && hasNewer(previous, login.keyholder, session.lastWriteAt.toISOString())) {
       counts.skipped++
       print(newerIndexed(id, previous))
-      return 0
+      return { code: 0 }
     }
     due = [{ agent, id, bytes: sessionBytes(session) }]
   }
-  if (due.length === 0) return counts.failed === 0 ? 0 : 1
+  if (due.length === 0) return { code: counts.failed === 0 ? 0 : 1 }
 
   step(`Checking session key authorization on ${options.network}`)
   const authorizedUntil = await storage.authorizedUntil().catch((error: unknown) => {
@@ -106,7 +113,7 @@ async function run(
   if (authorizedUntil <= Date.now() / 1000) {
     counts.failed += due.length
     print(`✗ Session key not authorized by ${login.grant.owner}, or its authorization expired. Run /attic:setup.`)
-    return 2
+    return { code: 2, needs: 'setup' }
   }
 
   const limit = options.chunkBytes ?? CHUNK_BYTES
@@ -165,8 +172,9 @@ async function run(
       print(
         `${index === 0 ? 'Nothing was uploaded.' : `${sealed.length + later} sessions were not uploaded.`} Deposit USDFC and approve the storage service in one step:`
       )
-      print(fundingUrl(options.consoleUrl, options.network))
-      return 2
+      const url = fundingUrl(options.consoleUrl, options.network)
+      print(url)
+      return { code: 2, needs: 'deposit', fundingUrl: url }
     }
     const results = await storage
       .storeBatch(sealed.map(({ envelope }) => envelope))
@@ -197,7 +205,7 @@ async function run(
       print(`✗ Old pieces remain stored: ${firstLine(error)}`)
     }
   }
-  return counts.failed === 0 && !removalFailed ? 0 : 1
+  return { code: counts.failed === 0 && !removalFailed ? 0 : 1 }
 }
 
 function findSession(agents: readonly Agent[], id: string): { agent: Agent; id: string; session: AgentSession } {
@@ -205,7 +213,7 @@ function findSession(agents: readonly Agent[], id: string): { agent: Agent; id: 
     const session = agent.readSession(id)
     if (session !== undefined) return { agent, id, session }
   }
-  throw new Error(`Session ${id} was not found in ${agents.map((agent) => agent.home).join(' or ')}.`)
+  throw new AtticError('not_found', `Session ${id} was not found in ${agents.map((agent) => agent.home).join(' or ')}.`)
 }
 
 /** Every local session idle for 24 hours that the index lacks, or holds older or with other files. */

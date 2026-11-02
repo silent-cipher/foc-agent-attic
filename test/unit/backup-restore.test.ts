@@ -45,10 +45,17 @@ test('a backed-up session, deleted locally, restores byte for byte', async () =>
   const paths = writeClaudeSession(home, ID)
   const original = paths.map((path) => readFileSync(join(home.claude, path)))
 
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   rmSync(join(home.claude, 'projects'), { recursive: true })
   const output = printed()
-  assert.equal(await restore(options(home), ID, output.print, storage.connect), 0)
+  assert.deepEqual(await restore(options(home), ID, output.print, storage.connect), {
+    code: 0,
+    sessionId: ID,
+    agent: 'claude-code',
+    written: 2,
+    files: 2,
+    resumeCommand: `claude --resume ${ID}`,
+  })
 
   assert.deepEqual(
     paths.map((path) => readFileSync(join(home.claude, path))),
@@ -67,18 +74,18 @@ test('active snapshots upload again only after their bytes change, for both agen
     const root = agent === 'codex' ? home.codex : home.claude
     const transcript = join(root, path)
     appendFileSync(transcript, '{"active')
-    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
     const first = indexEntry(ID)
     assert.ok(first)
-    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
     assert.equal(storage.state.pieces.size, 1)
     appendFileSync(transcript, '":true}\n')
     const expected = readFileSync(transcript)
-    assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
     assert.equal(storage.state.pieces.size, 1)
     assert.notEqual(indexEntry(ID)?.pieceCid, first.pieceCid)
     rmSync(root, { recursive: true })
-    assert.equal(await restore(options(home), ID, printed().print, storage.connect), 0)
+    assert.equal((await restore(options(home), ID, printed().print, storage.connect)).code, 0)
     assert.deepEqual(readFileSync(transcript), expected)
   }
 })
@@ -90,12 +97,12 @@ test('a failed upload leaves no index entry, so the next backup uploads it', asy
   storage.state.storeError = new Error('commit timed out')
 
   const output = printed()
-  assert.equal(await backup(options(home), ID, output.print, storage.connect), 1)
+  assert.equal((await backup(options(home), ID, output.print, storage.connect)).code, 1)
   assert.ok(output.lines.includes(`✗ Session ${ID}: commit timed out`), output.lines.join('\n'))
   assert.equal(indexEntry(ID), undefined)
 
   storage.state.storeError = undefined
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   assert.equal(storage.state.pieces.size, 1)
   assert.ok(indexEntry(ID))
 })
@@ -107,7 +114,13 @@ test('an unauthorized session key uploads nothing and says to run setup', async 
   storage.state.authorizedUntil = 0
   const output = printed()
 
-  assert.equal(await backup(options(home), ID, output.print, storage.connect), 2)
+  assert.deepEqual(await backup(options(home), ID, output.print, storage.connect), {
+    code: 2,
+    needs: 'setup',
+    backedUp: 0,
+    skipped: 0,
+    failed: 1,
+  })
   assert.match(output.lines.join('\n'), /✗ Session key not authorized .* Run \/attic:setup/)
   assert.equal(storage.state.pieces.size, 0)
   assert.equal(indexEntry(ID), undefined)
@@ -120,8 +133,16 @@ test('an account short of funds uploads nothing and prints the funding link', as
   storage.state.quote = { storageApproved: false, depositNeeded: parseUnits('0.25', 18), availableFunds: 0n }
   const output = printed()
 
-  assert.equal(await backup(options(home), ID, output.print, storage.connect), 2)
-  assert.ok(output.lines.includes('https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration'))
+  const fundingUrl = 'https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration'
+  assert.deepEqual(await backup(options(home), ID, output.print, storage.connect), {
+    code: 2,
+    needs: 'deposit',
+    fundingUrl,
+    backedUp: 0,
+    skipped: 0,
+    failed: 1,
+  })
+  assert.ok(output.lines.includes(fundingUrl))
   assert.equal(storage.state.pieces.size, 0)
 })
 
@@ -174,17 +195,17 @@ test('Codex backup restores on a new machine after index rebuild, and lists alon
   assert.equal(indexEntry(ID)?.agent, 'codex')
 
   const fresh = await loggedInHome()
-  assert.equal(await setup(options(fresh), printed().print, storage.connect), 0)
+  assert.equal((await setup(options(fresh), printed().print, storage.connect)).code, 0)
   const listing = printed()
   await sessions('calibration', [], listing.print)
   assert.match(listing.lines.join('\n'), new RegExp(`${ID} +codex +/tmp/attic-e2e`))
   assert.match(listing.lines.join('\n'), new RegExp(`${OTHER} +claude-code`))
   const output = printed()
-  assert.equal(await restore(options(fresh), ID, output.print, storage.connect), 0)
+  assert.equal((await restore(options(fresh), ID, output.print, storage.connect)).code, 0)
   assert.deepEqual(readFileSync(join(fresh.codex, path)), original)
   assert.equal(existsSync(fresh.claude), false)
   assert.ok(output.lines.includes(`codex resume ${ID}`))
-  assert.equal(await restore(options(fresh), ID, output.print, storage.connect), 0)
+  assert.equal((await restore(options(fresh), ID, output.print, storage.connect)).code, 0)
 })
 
 test('restore refuses a Codex piece indexed as Claude Code and writes nothing', async () => {
@@ -206,11 +227,11 @@ test('Codex renames wait for changed rollout bytes and unreadable titles do not 
   assert.ok(path)
   const index = join(home.codex, 'session_index.jsonl')
   writeFileSync(index, JSON.stringify({ id: ID, thread_name: 'Original title' }))
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   assert.equal(indexEntry(ID)?.title, 'Original title')
 
   writeFileSync(index, JSON.stringify({ id: ID, thread_name: 'Renamed title' }))
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   assert.equal(storage.state.pieces.size, 1)
   assert.equal(indexEntry(ID)?.title, 'Original title')
 
@@ -218,7 +239,7 @@ test('Codex renames wait for changed rollout bytes and unreadable titles do not 
     join(home.codex, path),
     '{"type":"event_msg","payload":{"type":"user_message","message":"Fix search"}}\n'
   )
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   assert.equal(storage.state.pieces.size, 1)
   assert.equal(indexEntry(ID)?.title, 'Renamed title')
   const login = await openLogin('calibration')
@@ -236,6 +257,6 @@ test('Codex renames wait for changed rollout bytes and unreadable titles do not 
   rmSync(index)
   mkdirSync(index)
   appendFileSync(join(home.codex, path), '{}\n')
-  assert.equal(await backup(options(home), ID, printed().print, storage.connect), 0)
+  assert.equal((await backup(options(home), ID, printed().print, storage.connect)).code, 0)
   assert.equal('title' in (indexEntry(ID) ?? {}), false)
 })

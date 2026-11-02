@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseEnv } from 'node:util'
 import { isHex, parseUnits } from 'viem'
-import { type Readiness, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
+import { type Readiness, type ReadinessResult, reportReadiness, type SetupOptions, setup } from '../../src/setup.ts'
 import { type Home, logIn, tempHome } from '../e2e/helpers.ts'
 import { makeGrant, STRANGER_KEY } from '../make-grant.ts'
 import { memoryStorage } from '../memory-storage.ts'
@@ -22,10 +22,10 @@ const ready: Readiness = {
   fundingUrl: 'https://pay.filecoin.cloud/console?deposit=2&operator=fwss&network=calibration',
 }
 
-function report(changes: Partial<Readiness>): { code: number; text: string } {
+function report(changes: Partial<Readiness>): ReadinessResult & { text: string } {
   const lines: string[] = []
-  const code = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
-  return { code, text: lines.join('\n') }
+  const result = reportReadiness({ ...ready, ...changes }, (line) => lines.push(line), NOW)
+  return { ...result, text: lines.join('\n') }
 }
 
 test('a ready account exits 0 and names the earlier of the two expiries', () => {
@@ -64,6 +64,27 @@ test('low funds or no storage approval print the pre-filled funding link', () =>
   assert.match(report({ availableFunds: 0n }).text, /✗ 0\.00 USDFC available \(keep at least 1\)/)
 })
 
+test('the readiness result holds each check, the expiry once authorized and the links that fix what is missing', () => {
+  const { text: _, ...result } = report({})
+  assert.deepEqual(result, {
+    code: 0,
+    authorized: true,
+    storageApproved: true,
+    funded: true,
+    expiresAt: '2027-01-25T08:00:00.000Z',
+    approveUrl: ready.approveUrl,
+  })
+  const { text: __, ...unready } = report({ authorizedUntil: 0, availableFunds: 0n })
+  assert.deepEqual(unready, {
+    code: 2,
+    authorized: false,
+    storageApproved: true,
+    funded: false,
+    approveUrl: ready.approveUrl,
+    fundingUrl: ready.fundingUrl,
+  })
+})
+
 // Attic keeps its login under HOME.
 async function home(): Promise<Home> {
   const home = await tempHome()
@@ -76,7 +97,7 @@ const saved = (home: Home) => parseEnv(readFileSync(join(home.root, '.attic', 's
 async function runSetup(grant?: string): Promise<{ code: number; text: string }> {
   const options: SetupOptions = { network: 'calibration', consoleUrl: 'https://pay.filecoin.cloud' }
   const lines: string[] = []
-  const code = await setup(
+  const { code } = await setup(
     grant === undefined ? options : { ...options, grant },
     (line) => lines.push(line),
     memoryStorage().connect

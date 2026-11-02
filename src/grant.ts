@@ -1,5 +1,6 @@
 import { type Grant, openDelivery, writeTarget } from '@filoz/keysmith'
 import type { Address, Hex } from 'viem'
+import { AtticError } from './errors.ts'
 
 /** The Keysmith scope every Attic piece is written under. */
 export const SCOPE = 'attic'
@@ -25,17 +26,17 @@ export async function openGrant(text: string, sessionKey: Hex, chainId: number):
   // Consoles and terminals wrap long lines.
   const compact = text.replace(/\s+/g, '')
   if (!/^fgr1_[A-Za-z0-9_-]+$/.test(compact)) {
-    throw new Error('This is not a Grant: a Grant starts with fgr1_. Copy it again from the console.')
+    throw new AtticError('setup', 'This is not a Grant: a Grant starts with fgr1_. Copy it again from the console.')
   }
   let opened: Awaited<ReturnType<typeof openDelivery>>
   try {
     opened = await openDelivery(sessionKey, Buffer.from(compact.slice('fgr1_'.length), 'base64url'))
   } catch (error) {
-    throw new Error(`The Grant does not open: ${error instanceof Error ? error.message : String(error)}.`)
+    throw new AtticError('setup', `The Grant does not open: ${error instanceof Error ? error.message : String(error)}.`)
   }
   const { claim, grant, key } = opened
   if (claim.chainId !== BigInt(chainId)) {
-    throw new Error(`The Grant is for chain id ${claim.chainId}, not ${chainId}.`)
+    throw new AtticError('setup', `The Grant is for chain id ${claim.chainId}, not ${chainId}.`)
   }
   writeTarget(grant, key, SCOPE)
   return { text: compact, owner: claim.owner, expires: claim.expires, grant, key }

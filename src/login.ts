@@ -5,6 +5,7 @@ import { parseEnv } from 'node:util'
 import { calibration, mainnet } from '@filoz/synapse-core/chains'
 import { type Address, type Hex, isHex, size } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { AtticError } from './errors.ts'
 import { type OpenedGrant, openGrant } from './grant.ts'
 import { type Header, openPiece, sealPiece } from './piece.ts'
 
@@ -35,11 +36,14 @@ type SavedLogin = { sessionKey: Hex; network: Network; grant?: string }
  */
 export async function openLogin(network: Network): Promise<Login> {
   const saved = readSavedLogin(loginPath(), network)
-  if (saved?.grant === undefined) throw new Error('Attic is not logged in. Run /attic:setup first.')
+  if (saved?.grant === undefined) throw new AtticError('setup', 'Attic is not logged in. Run /attic:setup first.')
   try {
     return await open(saved, saved.grant)
   } catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : String(error)} Run /attic:setup to log in again.`)
+    throw new AtticError(
+      'setup',
+      `${error instanceof Error ? error.message : String(error)} Run /attic:setup to log in again.`
+    )
   }
 }
 
@@ -115,10 +119,16 @@ function readSavedLogin(path: string, network: Network): SavedLogin | undefined 
     size(sessionKey) !== 32 ||
     (savedNetwork !== 'mainnet' && savedNetwork !== 'calibration')
   ) {
-    throw new Error(`${path} is not an Attic session file. Fix it, or delete it to start over with a new key.`)
+    throw new AtticError(
+      'conflict',
+      `${path} is not an Attic session file. Fix it, or delete it to start over with a new key.`
+    )
   }
   if (savedNetwork !== network) {
-    throw new Error(`The saved session key is for ${savedNetwork}, not ${network}. Delete ${path} to start over.`)
+    throw new AtticError(
+      'conflict',
+      `The saved session key is for ${savedNetwork}, not ${network}. Delete ${path} to start over.`
+    )
   }
   return grant === undefined ? { sessionKey, network } : { sessionKey, network, grant }
 }

@@ -85,6 +85,12 @@ Only one backup runs per machine, including explicit-ID backups. Another invocat
 
 `attic sessions --json` prints only the matching sessions as a JSON array, newest first, each with its session ID, agent, title, first prompt, project, branch and last write (title, first prompt and branch only when recorded). It accepts the same word filters and needs no login; an empty index or no matches produces `[]`.
 
+## Driving the CLI from an agent
+
+`attic --help` lists the commands and exit codes, and `attic <command> --help` shows that command's arguments (required or optional), an example and its `--json` result; both exit 0. With `--json`, `setup`, `backup`, `restore` and `refresh` print one JSON object on stdout when they finish (the readiness checks and console links, the run counts, the resume command, or the refresh counts and skipped pieces) and print their progress on stderr.
+
+Every command exits 0 when done, 1 when it failed, 2 when the owner has to act in the console first (paste a Grant, approve the session key, or deposit USDFC), and 64 for a usage error: wrong arguments, or a bad `ATTIC_NETWORK` or `ATTIC_CONSOLE_URL`. With `--json`, a failure prints `{"error", "message", "retryable"}` on stdout and the message on stderr. `error` is `usage`, `setup` (run setup), `not_found` (refresh the index, or check the ID), `conflict` (a person has to move or fix local files) or `failed`; only `failed` is `retryable`.
+
 ## Other machines' backups
 
 `/attic:refresh` adds the sessions other machines backed up to this machine's index. It lists the pieces in the owner's Attic data sets under the login's group key, and decrypts only the start of each piece the index doesn't already hold, where the header is, 8 at a time. It keeps the newest piece of each session, leaves every other entry alone, and reports how many sessions it added or updated. It only reads the chain into the index and never uploads. This needs only the Grant, so sessions can be listed and restored before a new session key is authorized.

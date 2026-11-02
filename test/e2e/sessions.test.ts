@@ -178,19 +178,17 @@ test('a Codex backup appears in sessions and matches its title, prompt and branc
   const previousHome = process.env.HOME
   try {
     process.env.HOME = home.root
-    assert.equal(
-      await backup(
-        {
-          network: 'calibration',
-          consoleUrl: 'https://pay.filecoin.cloud',
-          agents: [codex(home.codex)],
-        },
-        ID,
-        () => undefined,
-        memoryStorage().connect
-      ),
-      0
+    const { code } = await backup(
+      {
+        network: 'calibration',
+        consoleUrl: 'https://pay.filecoin.cloud',
+        agents: [codex(home.codex)],
+      },
+      ID,
+      () => undefined,
+      memoryStorage().connect
     )
+    assert.equal(code, 0)
   } finally {
     if (previousHome === undefined) delete process.env.HOME
     else process.env.HOME = previousHome

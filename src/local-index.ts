@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
+import { AtticError } from './errors.ts'
 import { type Keyholder, type Login, sameKeyholder, writePrivateFile } from './login.ts'
 import { type Header, readHeader } from './piece.ts'
 import type { Copy, Storage } from './storage.ts'
@@ -45,6 +46,14 @@ export function hasIndex(): boolean {
   return existsSync(indexPath())
 }
 
+/** What a refresh added or updated, how many sessions the index then holds, and the pieces it couldn't read. */
+export type RefreshResult = {
+  added: number
+  updated: number
+  sessions: number
+  skippedPieces: { pieceCid: string; error: string }[]
+}
+
 /** How many piece headers a refresh reads at once. */
 const HEADER_READS = 8
 
@@ -53,7 +62,11 @@ const HEADER_READS = 8
  * leaving every other entry alone. Writes the index only once every header is read, so a failed listing changes
  * nothing. A piece whose header can't be read is skipped and reported, and read again by the next refresh.
  */
-export async function refreshIndex(login: Login, storage: Storage, print: (line: string) => void): Promise<void> {
+export async function refreshIndex(
+  login: Login,
+  storage: Storage,
+  print: (line: string) => void
+): Promise<RefreshResult> {
   const held = new Set(indexEntries().map((entry) => entry.pieceCid))
   const listed = await storage.pieces()
   const onChain = new Set(listed.map((piece) => piece.pieceCid))
@@ -62,6 +75,7 @@ export async function refreshIndex(login: Login, storage: Storage, print: (line:
   const pieces = listed.filter((piece) => !held.has(piece.pieceCid))
   print(`Found ${listed.length} pieces on chain, ${pieces.length} not in the index`)
   const found: IndexEntry[] = []
+  const skippedPieces: RefreshResult['skippedPieces'] = []
   const queue = pieces.values()
   await Promise.all(
     Array.from({ length: HEADER_READS }, async () => {
@@ -76,7 +90,9 @@ export async function refreshIndex(login: Login, storage: Storage, print: (line:
             copies: piece.copies,
           })
         } catch (error) {
-          print(`✗ Skipped piece ${piece.pieceCid}: ${error instanceof Error ? error.message : String(error)}`)
+          const reason = error instanceof Error ? error.message : String(error)
+          skippedPieces.push({ pieceCid: piece.pieceCid, error: reason })
+          print(`✗ Skipped piece ${piece.pieceCid}: ${reason}`)
         }
       }
     })
@@ -103,11 +119,13 @@ export async function refreshIndex(login: Login, storage: Storage, print: (line:
     index.sessions[entry.sessionId] = entry
   }
   writePrivateFile(path, `${JSON.stringify(index, null, 2)}\n`)
+  const sessions = Object.keys(index.sessions).length
   print(
     added + updated === 0
-      ? `✓ The index is already up to date: ${Object.keys(index.sessions).length} sessions`
+      ? `✓ The index is already up to date: ${sessions} sessions`
       : `✓ Index refreshed: ${added} new sessions, ${updated} updated`
   )
+  return { added, updated, sessions, skippedPieces }
 }
 
 function indexPath(): string {
@@ -119,7 +137,7 @@ function readIndex(path: string): Index {
   if (!existsSync(path)) return { sessions: {} }
   const index = JSON.parse(readFileSync(path, 'utf8'))
   if (typeof index?.sessions !== 'object' || index.sessions === null) {
-    throw new Error(`${path} is not an Attic index. Fix it, or move it away.`)
+    throw new AtticError('conflict', `${path} is not an Attic index. Fix it, or move it away.`)
   }
   return index
 }
