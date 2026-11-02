@@ -1,6 +1,6 @@
 {
   "name": "foc-agent-attic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Back up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cloud",
   "repository": {
     "type": "git",

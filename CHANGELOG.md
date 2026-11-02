@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/silent-cipher/foc-agent-attic/compare/v0.1.0...v0.2.0) (2026-11-02)
+
+
+### Features
+
+* make the CLI self-describing for agents ([#45](https://github.com/silent-cipher/foc-agent-attic/issues/45)) ([e88959e](https://github.com/silent-cipher/foc-agent-attic/commit/e88959e8d3c168738ed2e190604e095ffbe16d8c))
+* publish the CLI to npm ([#47](https://github.com/silent-cipher/foc-agent-attic/issues/47)) ([50abc4d](https://github.com/silent-cipher/foc-agent-attic/commit/50abc4d90bd2b2e3e8ad522dd016abeb2c366ffc))
+
 ## 0.1.0 (2026-11-01)
 
 
