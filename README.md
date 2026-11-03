@@ -99,7 +99,7 @@ cron runs with a minimal `PATH`, so use the full path to `attic`, and make sure 
 
 ## Scripting and agents
 
-`attic --help` lists every command and exit code, and `attic <command> --help` shows its arguments, an example and its `--json` output. With `--json`, each command prints one JSON object on stdout and its progress on stderr. Exit codes are 0 done, 1 failed, 2 the owner has to act in the console, and 64 for a usage error.
+`attic --help` lists every command and exit code, and `attic <command> --help` shows its arguments, an example and its `--json` output. With `--json`, `setup`, `backup`, `restore` and `refresh` print one JSON object on stdout and their progress on stderr, while `sessions --json` prints a JSON array of the matching sessions, `[]` when none match. Exit codes are 0 done, 1 failed, 2 the owner has to act in the console, and 64 for a usage error.
 
 ## Contributing
 
