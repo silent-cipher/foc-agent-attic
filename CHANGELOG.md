@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/silent-cipher/foc-agent-attic/compare/v0.2.0...v0.2.1) (2026-11-03)
+
+
+### Documentation
+
+* make the README self-serve for users ([#51](https://github.com/silent-cipher/foc-agent-attic/issues/51)) ([382644f](https://github.com/silent-cipher/foc-agent-attic/commit/382644f597c9a0e47d96ad88699ed304d5689d49))
+
 ## [0.2.0](https://github.com/silent-cipher/foc-agent-attic/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "attic",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Back up Claude Code and Codex sessions, encrypted, to Filecoin Onchain Cloud.",
   "author": {
     "name": "Puspendra Mahariya",
